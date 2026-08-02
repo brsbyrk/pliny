@@ -1,0 +1,56 @@
+# Pliny docker-compose
+# Quick start: docker compose up -d
+# Dashboard: http://localhost:3131
+# API docs:  http://localhost:3131/docs
+
+services:
+  pliny:
+    build: .
+    container_name: pliny
+    restart: unless-stopped
+    ports:
+      - "3131:3131"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.deepseek.com}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-v4-flash}
+    volumes:
+      - pliny_data:/home/pliny/data
+      - pliny_models:/home/pliny/models
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3131/api/stats')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ── Optional: cron scheduler for synthesis, extraction retry, digest ──
+  pliny-cron:
+    build: .
+    container_name: pliny-cron
+    restart: unless-stopped
+    profiles: ["cron"]
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.deepseek.com}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-v4-flash}
+    volumes:
+      - pliny_data:/home/pliny/data
+      - pliny_models:/home/pliny/models
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        while true; do
+          echo "[$$(date -u +%Y-%m-%dT%H:%M:%SZ)] Running extract cron..."
+          python3 src/cron/extract_cron.py --max 50 || true
+          echo "[$$(date -u +%Y-%m-%dT%H:%M:%SZ)] Running karakeep import..."
+          python3 src/ingest/karakeep_import.py --batch 50 || true
+          echo "[$$(date -u +%Y-%m-%dT%H:%M:%SZ)] Running synthesis..."
+          python3 src/cron/synthesize.py --days 7 --max-syntheses 10 || true
+          echo "[$$(date -u +%Y-%m-%dT%H:%M:%SZ)] Done. Sleeping 24h..."
+          sleep 86400
+        done
+
+volumes:
+  pliny_data:
+  pliny_models:

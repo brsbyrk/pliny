@@ -1,0 +1,17 @@
+# Pliny RSS feeds — one URL per line
+# Lines starting with # are comments
+# Format: URL # Optional Name
+
+# AI / ML
+https://simonwillison.net/atom/everything/ # Simon Willison's Blog
+https://karpathy.bearblog.dev/feed/ # Andrej Karpathy
+https://lilianweng.github.io/atom.xml # Lilian Weng
+
+# Tech
+https://news.ycombinator.com/rss # Hacker News
+https://blog.rust-lang.org/feed.xml # Rust Blog
+https://www.suno.wiki/feed/ # Suno AI
+
+# Research
+https://arxiv.org/rss/cs.AI # arXiv CS.AI
+https://arxiv.org/rss/cs.LG # arXiv CS.LG

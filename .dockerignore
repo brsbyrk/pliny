@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+*.egg-info/
+dist/
+build/
+node_modules/
+
+# Data
+*.db
+*.db-wal
+*.db-shm
+data/
+
+# Models (downloaded at runtime)
+models/
+
+# Media
+media/
+*.mp4
+*.mkv
+*.webm
+
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/
+
+# Cache
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Git
+.git/
+.gitignore
+
+# Docs (not needed at runtime)
+docs/
+browser-ext/
+
+# Secrets
+.env
+*.key
+*.pem
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
