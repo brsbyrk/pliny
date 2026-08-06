@@ -57,8 +57,8 @@ async fn main() -> anyhow::Result<()> {
             commands::search(&config, &query).await?;
         }
         Command::Rss { file } => {
-            tracing::info!("Monitoring feeds from: {file}");
-            // TODO: feed monitor loop
+            let config = pliny::config::Config::from_env();
+            commands::rss(&config, &file).await?;
         }
     }
 

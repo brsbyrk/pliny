@@ -53,3 +53,16 @@ pub async fn search(config: &pliny::config::Config, query: &str) -> Result<()> {
 
     Ok(())
 }
+
+/// Monitor RSS/Atom feeds.
+pub async fn rss(config: &pliny::config::Config, file: &str) -> Result<()> {
+    let db_path = config.data_dir.join("pliny.db");
+    let store = pliny::store::Store::open(&db_path)?;
+
+    let monitor = pliny::feed::FeedMonitor::from_file(
+        std::path::Path::new(file),
+        3600,
+    )?;
+
+    monitor.run_loop(store).await
+}
