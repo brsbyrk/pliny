@@ -146,42 +146,39 @@ async fn fetch_transcript(client: &reqwest::Client, video_id: &str) -> Option<St
 }
 
 /// Extract the first English caption track URL from ytInitialPlayerResponse.
+///
+/// This is the same approach yt-dlp uses: parse the player response JSON
+/// embedded in the watch page, navigate to caption tracks, pick English.
 fn extract_caption_url(html: &str) -> Option<String> {
     // Find the ytInitialPlayerResponse JSON blob
-    let marker = "ytInitialPlayerResponse = ";
+    let marker = "var ytInitialPlayerResponse = ";
     let start = html.find(marker)? + marker.len();
     let slice = &html[start..];
 
-    // Find the closing marker (next script tag or var declaration)
+    // Find the closing marker
     let end = slice.find(";</script>")
-        .or_else(|| slice.find("};"))
-        .or_else(|| slice.find("\nvar "))?;
+        .or_else(|| slice.find("};var "))?;
     let json_str = &slice[..end];
 
-    // Quick parse to find caption tracks
-    // Looking for: "captionTracks":[{"baseUrl":"...","languageCode":"en",...}]
-    let tracks_marker = "\"captionTracks\":[";
-    let tracks_start = json_str.find(tracks_marker)? + tracks_marker.len();
-    let tracks_slice = &json_str[tracks_start..];
-    let tracks_end = tracks_slice.find("}]")? + 1;
-    let tracks_str = &tracks_slice[..tracks_end];
+    // Parse the full JSON structure
+    let player_response: serde_json::Value = serde_json::from_str(json_str).ok()?;
 
-    // Find the first "en" language track
-    #[derive(Deserialize)]
-    struct CaptionTrack {
-        #[serde(rename = "baseUrl")]
-        base_url: String,
-        #[serde(rename = "languageCode")]
-        language_code: String,
+    // Navigate: captions → playerCaptionsTracklistRenderer → captionTracks
+    let tracks = player_response
+        .get("captions")?
+        .get("playerCaptionsTracklistRenderer")?
+        .get("captionTracks")?
+        .as_array()?;
+
+    // Find first English track (languageCode "en" or "en-US", etc.)
+    for track in tracks {
+        let lang = track.get("languageCode")?.as_str()?;
+        if lang.starts_with("en") {
+            return track.get("baseUrl")?.as_str().map(|s| s.to_string());
+        }
     }
 
-    // Wrap in array brackets for JSON parsing
-    let array_json = format!("[{tracks_str}]");
-    let tracks: Vec<CaptionTrack> = serde_json::from_str(&array_json).ok()?;
-
-    tracks.into_iter()
-        .find(|t| t.language_code == "en")
-        .map(|t| t.base_url)
+    None
 }
 
 /// Parse YouTube timedtext XML into plain text.

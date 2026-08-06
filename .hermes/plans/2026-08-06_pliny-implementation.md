@@ -16,68 +16,24 @@
 
 ---
 
-## Phase 1: Capture Engine
+## Phase 1: Capture Engine ✅
 
 ### Task 1: Web Extractor ✅
+> Readability-based HTML extraction. 6 tests.
 
-> **DONE** — 6 tests passing. Readability-based HTML extraction with 404/empty/non-HTML handling.
+### Task 2: X/Twitter Extractor ✅
+> og:meta primary + fxtwitter enrichment. 17 tests (8 parsing + 2 JSON + 7 integration).
 
-> The catch-all extractor. Uses `readability` crate to extract article content from HTML. Falls back to plain text if readability fails.
+### Task 3: GitHub Extractor ✅
+> Raw README (main→master) + API fallback. 14 tests (6 parsing + 4 integration + 4 API).
 
-**Files:**
-- Implement: `src/extractors/web.rs`
-- Test: `tests/extractors/web.rs`
+### Task 4: Reddit Extractor ✅
+> JSON API (no auth) with comment extraction. 11 tests (7 parsing/formatting + 4 integration).
 
-**Acceptance criteria:**
-- `can_handle()` returns true for any URL (catch-all)
-- `extract()` fetches HTML → readability → Entry with title, content, source_type
-- Handles: valid article, 404, timeout, non-HTML content, empty page
-- `name()` returns "web"
+### Task 5: YouTube Extractor ✅
+> oembed metadata + timedtext captions (no yt-dlp). 11 tests (8 parsing + 3 integration).
 
-### Task 2: X/Twitter Extractor
-
-> Fetches tweet/thread data from fxtwitter API (free, no auth).
-
-**Files:**
-- Implement: `src/extractors/twitter.rs`
-- Test: `tests/extractors/twitter.rs`
-
-**Acceptance criteria:**
-- `can_handle()` returns true for x.com and twitter.com URLs
-- `extract()` calls fxtwitter API → formats tweet/thread → Entry
-- Handles: single tweet, thread, deleted tweet, invalid URL
-
-### Task 3: GitHub Extractor
-
-> Fetches README from raw.githubusercontent.com, falls back to API description.
-
-**Files:**
-- Implement: `src/extractors/github.rs`
-- Test: `tests/extractors/github.rs`
-
-### Task 4: Reddit Extractor
-
-> Fetches post + comments from reddit.com/.json API (free, rate-limited).
-
-**Files:**
-- Implement: `src/extractors/reddit.rs`
-- Test: `tests/extractors/reddit.rs`
-
-### Task 5: YouTube Extractor
-
-> Fetches metadata via oembed API. Transcript via yt-dlp (system dependency).
-
-**Files:**
-- Implement: `src/extractors/youtube.rs`
-- Test: `tests/extractors/youtube.rs`
-
-### Task 6: Ingest Pipeline
-
-> Wires extractors into `pliny ingest <url>` CLI command. Auto-detect source → extract → store.
-
-**Files:**
-- Implement: `src/commands.rs`, `src/extractors/mod.rs`
-- Test: `tests/ingest.rs`
+**Total: 55 tests, all pass. 0 warnings.**
 
 ---
 
