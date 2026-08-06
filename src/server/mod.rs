@@ -1,43 +1,50 @@
-//! Axum HTTP server — API routes and static dashboard.
+//! Axum HTTP server — API routes + embedded React dashboard.
 
 use anyhow::Result;
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
-    response::Json,
+    http::{header, StatusCode},
+    response::{IntoResponse, Json, Response},
     routing::{get, post},
     Router,
 };
+use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tower_http::services::ServeDir;
 
 use crate::config::Config;
 use crate::search::SearchResult;
 use crate::store::Store;
+
+/// Embedded React frontend (ui/dist/).
+#[derive(RustEmbed)]
+#[folder = "ui/dist/"]
+struct Assets;
 
 /// Shared application state.
 pub struct AppState {
     pub store: Store,
 }
 
-/// Build the Axum router with all API routes and static file serving.
+/// Build the Axum router.
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
+        // API
         .route("/api/health", get(health))
-        .route("/api/search", get(search))
-        .route("/api/ingest", post(ingest))
+        .route("/api/entries", get(search))
+        .route("/api/ingest/add-url", post(ingest))
         .route("/api/stats", get(stats))
-        .nest_service("/", ServeDir::new("ui"))
+        // Serve embedded frontend
+        .route("/{*path}", get(serve_frontend))
+        .route("/", get(serve_index))
         .with_state(state)
 }
 
-/// Start the server on the configured address.
+/// Start the server.
 pub async fn serve(config: &Config) -> Result<()> {
     let db_path = config.data_dir.join("pliny.db");
     let store = Store::open(&db_path)?;
-
     let count = store.count().unwrap_or(0);
     tracing::info!("Database: {} entries", count);
 
@@ -45,8 +52,7 @@ pub async fn serve(config: &Config) -> Result<()> {
     let app = router(state);
 
     let addr: SocketAddr = format!("{}:{}", config.bind_host, config.port).parse()?;
-    tracing::info!("Pliny dashboard → http://{addr}");
-    tracing::info!("API docs → http://{addr}/api/health");
+    tracing::info!("Pliny → http://{addr}");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
@@ -61,20 +67,39 @@ async fn health() -> Json<serde_json::Value> {
 
 #[derive(Deserialize)]
 struct SearchQuery {
-    q: String,
+    q: Option<String>,
     #[serde(default = "default_limit")]
     limit: usize,
+    #[serde(default)]
+    entry_type: Option<String>,
+    #[serde(default)]
+    tags: Option<String>,
 }
 
-fn default_limit() -> usize { 20 }
+fn default_limit() -> usize { 24 }
 
 async fn search(
     State(state): State<Arc<AppState>>,
     Query(params): Query<SearchQuery>,
-) -> Result<Json<Vec<SearchResult>>, StatusCode> {
-    let results = state.store.search_fts(&params.q, params.limit)
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let query = params.q.unwrap_or_default();
+
+    if query.is_empty() {
+        let results = state.store.list_recent(params.limit)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        return Ok(Json(serde_json::json!({
+            "entries": results,
+            "total": state.store.count().unwrap_or(0),
+        })));
+    }
+
+    let results = state.store.search_fts(&query, params.limit)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(results))
+
+    Ok(Json(serde_json::json!({
+        "entries": results,
+        "total": results.len(),
+    })))
 }
 
 #[derive(Deserialize)]
@@ -82,16 +107,10 @@ struct IngestRequest {
     url: String,
 }
 
-#[derive(Serialize)]
-struct IngestResponse {
-    status: String,
-    entry_id: Option<String>,
-}
-
 async fn ingest(
     State(state): State<Arc<AppState>>,
     Json(body): Json<IngestRequest>,
-) -> Result<Json<IngestResponse>, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     let client = reqwest::Client::new();
     let entry = crate::extractors::extract(&client, &body.url)
         .await
@@ -102,27 +121,74 @@ async fn ingest(
             let id = entry.id.to_string();
             state.store.insert(&entry)
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            Ok(Json(IngestResponse {
-                status: "ingested".into(),
-                entry_id: Some(id),
-            }))
+            Ok(Json(serde_json::json!({
+                "status": "ingested",
+                "entry_id": id,
+            })))
         }
-        None => Ok(Json(IngestResponse {
-            status: "no_content".into(),
-            entry_id: None,
-        })),
+        None => Ok(Json(serde_json::json!({
+            "status": "no_content",
+        }))),
     }
-}
-
-#[derive(Serialize)]
-struct StatsResponse {
-    total_entries: usize,
 }
 
 async fn stats(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<StatsResponse>, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     let count = state.store.count()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(StatsResponse { total_entries: count }))
+    Ok(Json(serde_json::json!({"total_entries": count})))
+}
+
+// ── Static file serving ────────────────────────────────────────
+
+async fn serve_index() -> impl IntoResponse {
+    serve_asset("index.html")
+}
+
+async fn serve_frontend(
+    axum::extract::Path(path): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    serve_asset(&path)
+}
+
+fn serve_asset(path: &str) -> Response {
+    let path = path.trim_start_matches('/');
+
+    match Assets::get(path) {
+        Some(file) => {
+            let content_type = match path.rsplit('.').next() {
+                Some("html") => "text/html",
+                Some("css") => "text/css",
+                Some("js") => "application/javascript",
+                Some("json") => "application/json",
+                Some("png") => "image/png",
+                Some("svg") => "image/svg+xml",
+                Some("woff2") => "font/woff2",
+                _ => "application/octet-stream",
+            };
+            let mut response = Response::new(axum::body::Body::from(file.data));
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                header::HeaderValue::from_static(content_type),
+            );
+            response
+        }
+        None => {
+            // SPA fallback: serve index.html for client-side routing
+            if let Some(file) = Assets::get("index.html") {
+                let mut response = Response::new(axum::body::Body::from(file.data));
+                response.headers_mut().insert(
+                    header::CONTENT_TYPE,
+                    header::HeaderValue::from_static("text/html"),
+                );
+                response
+            } else {
+                Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(axum::body::Body::from("Not Found"))
+                    .unwrap()
+            }
+        }
+    }
 }
