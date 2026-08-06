@@ -32,3 +32,24 @@ pub async fn ingest(config: &pliny::config::Config, url: &str) -> Result<()> {
 
     Ok(())
 }
+
+/// Search the knowledge base.
+pub async fn search(config: &pliny::config::Config, query: &str) -> Result<()> {
+    let db_path = config.data_dir.join("pliny.db");
+    let store = pliny::store::Store::open(&db_path)?;
+
+    let results = store.search_fts(query, 20)?;
+
+    if results.is_empty() {
+        println!("No results for: {query}");
+        return Ok(());
+    }
+
+    println!("{} result(s) for: {query}\n", results.len());
+    for r in &results {
+        println!("  [{}] {}", r.source_type, r.title);
+        println!("    {}…\n", &r.snippet[..r.snippet.len().min(120)]);
+    }
+
+    Ok(())
+}

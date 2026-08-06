@@ -53,8 +53,8 @@ async fn main() -> anyhow::Result<()> {
             pliny::server::serve(&config.bind_host, config.port).await?;
         }
         Command::Search { query } => {
-            tracing::info!("Searching: {query}");
-            // TODO: query store
+            let config = pliny::config::Config::from_env();
+            commands::search(&config, &query).await?;
         }
         Command::Rss { file } => {
             tracing::info!("Monitoring feeds from: {file}");
