@@ -1,0 +1,66 @@
+[package]
+name = "pliny"
+version = "0.1.0"
+edition = "2021"
+description = "Personal knowledge engine — capture anything, search everything, single binary"
+license = "MIT"
+repository = "https://github.com/brsbyrk/pliny"
+
+[[bin]]
+name = "pliny"
+path = "src/main.rs"
+
+[dependencies]
+# ── Async runtime ──
+tokio = { version = "1", features = ["full"] }
+
+# ── Web server ──
+axum = "0.7"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "cors"] }
+
+# ── Database ──
+rusqlite = { version = "0.32", features = ["bundled", "vtab", "column_decltype"] }
+sqlite-vec = "0.1"
+
+# ── HTTP client ──
+reqwest = { version = "0.12", features = ["json"] }
+
+# ── Serialization ──
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# ── URL parsing ──
+url = "2"
+
+# ── Time ──
+chrono = { version = "0.4", features = ["serde"] }
+
+# ── Error handling ──
+thiserror = "2"
+anyhow = "1"
+
+# ── Logging ──
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# ── Feed parsing (RSS/Atom) ──
+feed-rs = "2"
+
+# ── HTML extraction ──
+readability = "0.3"
+scraper = "0.21"
+
+# ── ONNX inference (embeddings) ──
+ort = "2.0.0-rc.12"
+ndarray = "0.16"
+tokenizers = "0.21"
+
+# ── CLI ──
+clap = { version = "4", features = ["derive"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

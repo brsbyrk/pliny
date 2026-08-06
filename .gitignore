@@ -1,61 +1,20 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-*.egg-info/
-dist/
-build/
-node_modules/
+# Rust
+target/
+Cargo.lock
 
 # Data
 *.db
 *.db-wal
 *.db-shm
-data/*.bak
+data/
 
-# Model artifacts (regenerated on rebuild)
-models/centroids/
-
-# Runtime state (not checked in)
-data/queues/
-data/user/
-
-# Media (video files — not tracked, only local)
-media/
-Media/
-*.mp4
-*.mkv
-*.webm
-
-# ONNX model files only — PyTorch safetensors unused
-models/onnx/*/model.safetensors
-*.safetensors
+# Models
+models/
 
 # OS
 .DS_Store
-Thumbs.db
-
-# Editor
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# Cache
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
 
 # Secrets
 .env
-*.key
-*.pem
-
-# Auth cookies (X login session for article extraction)
-.x_auth_cookies.json
-
-# Embedded git repos in archive
-archive/
-.hermes/
-steward-legacy/
