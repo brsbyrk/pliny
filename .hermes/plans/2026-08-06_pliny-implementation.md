@@ -18,7 +18,9 @@
 
 ## Phase 1: Capture Engine
 
-### Task 1: Web Extractor
+### Task 1: Web Extractor ✅
+
+> **DONE** — 6 tests passing. Readability-based HTML extraction with 404/empty/non-HTML handling.
 
 > The catch-all extractor. Uses `readability` crate to extract article content from HTML. Falls back to plain text if readability fails.
 
