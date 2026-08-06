@@ -59,6 +59,7 @@ tokenizers = "0.21"
 # ── CLI ──
 clap = { version = "4", features = ["derive"] }
 async-trait = "0.1.91"
+regex = "1.13.1"
 
 [profile.release]
 opt-level = 3
