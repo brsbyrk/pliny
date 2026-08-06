@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Serve => {
             let config = pliny::config::Config::from_env();
-            pliny::server::serve(&config.bind_host, config.port).await?;
+            pliny::server::serve(&config).await?;
         }
         Command::Search { query } => {
             let config = pliny::config::Config::from_env();

@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pliny — search, explore, graph, pipeline</title>
+<link rel="stylesheet" href="/static/command-bar.css">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="/static/pliny.css">
+</head>
+<body>
+
+<div class="app" id="app">
+  <div class="header">
+    <div class="header-top">
+      <div class="logo">Pliny <span id="viewLabel">search</span></div>
+    </div>
+
+    <!-- Stats bar — entry count, last updated, tag count -->
+    <div class="stats-bar" id="statsBar">
+      <span class="stat">
+        <span class="val" id="statEntries">—</span>
+        <span class="lbl">entries</span>
+      </span>
+      <span class="stat-divider"></span>
+      <span class="stat">
+        <span class="val" id="statTags">—</span>
+        <span class="lbl">tags</span>
+      </span>
+      <span class="stat-divider"></span>
+      <span class="stat">
+        <span class="val" id="statStarred">—</span>
+        <span class="lbl">starred</span>
+      </span>
+      <span class="stat-updated" id="statUpdated"></span>
+    </div>
+
+    <div class="view-tabs" id="viewTabs">
+      <button class="view-tab active" data-view="browse" onclick="switchView('browse')"><span class="tab-icon">🔍</span> Browse</button>
+      <button class="view-tab" data-view="graph" onclick="switchView('graph')"><span class="tab-icon">🕸</span> Graph</button>
+      <button class="view-tab" data-view="pipeline" onclick="switchView('pipeline')"><span class="tab-icon">⚙</span> Pipeline</button>
+    </div>
+
+    <!-- Context-aware indicator bar -->
+    <div class="context-bar" id="contextBar"></div>
+
+    <!-- Shared search bar (Browse mode) -->
+    <div class="search-section" id="searchSection">
+      <div class="search-box">
+        <input class="search-input" id="search" type="text"
+               placeholder="Search bookmarks..." autofocus>
+        <span class="search-kbd-hint"><kbd>⌘K</kbd> commands</span>
+        <button class="search-clear-btn" id="searchClearBtn" onclick="clearSearch()" style="display:none;">×</button>
+        <button class="filter-toggle-btn" id="filterToggleBtn" onclick="toggleBrowseFilters()">▼ Filters</button>
+        <span id="filterCount" class="filter-count" style="display:none;"></span>
+      </div>
+      <div id="activeFilterChips" class="active-filters" style="display:none;"></div>
+
+      <!-- Advanced filter panel (collapsible) -->
+      <div class="browse-filters" id="browseFilters">
+        <div class="filter-row">
+          <div class="filter-group">
+            <label>Source</label>
+            <select id="browseSource" onchange="browseSearch()">
+              <option value="">All Sources</option>
+              <option value="x">X/Twitter</option>
+              <option value="github">GitHub</option>
+              <option value="reddit">Reddit</option>
+              <option value="youtube">YouTube</option>
+              <option value="hackernews">Hacker News</option>
+              <option value="arxiv">arXiv</option>
+              <option value="medium">Medium</option>
+              <option value="substack">Substack</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Type</label>
+            <select id="browseEntryType" onchange="browseSearch()">
+              <option value="">All Types</option>
+              <option value="bookmark">Bookmark</option>
+              <option value="x_thread">X Thread</option>
+              <option value="x_article">X Article</option>
+              <option value="synthesis">Synthesis</option>
+              <option value="x_observation">X Observation</option>
+              <option value="youtube">YouTube</option>
+              <option value="reddit">Reddit</option>
+              <option value="github">GitHub</option>
+              <option value="arxiv">arXiv</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Content</label>
+            <select id="browseContent" onchange="browseSearch()">
+              <option value="all">All Sizes</option>
+              <option value="thin">&lt;200B</option>
+              <option value="normal">Normal</option>
+              <option value="enriched">10K+</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Sort</label>
+            <select id="browseSort" onchange="browseSearch()">
+              <option value="date_desc">Newest First</option>
+              <option value="date_asc">Oldest First</option>
+              <option value="size_desc">Largest First</option>
+              <option value="size_asc">Smallest First</option>
+              <option value="title_asc">Title A–Z</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Date Range</label>
+            <select id="browseDatePreset" onchange="browseDateChange()">
+              <option value="">All Time</option>
+              <option value="7d">Last 7 Days</option>
+              <option value="30d">Last 30 Days</option>
+              <option value="90d">Last 90 Days</option>
+              <option value="custom">Custom</option>
+            </select>
+            <div class="custom-date" id="browseCustomDate" style="display:none;">
+              <input type="date" id="browseDateFrom" onchange="browseSearch()">
+              <span>→</span>
+              <input type="date" id="browseDateTo" onchange="browseSearch()">
+            </div>
+          </div>
+        </div>
+        <div class="filter-row">
+          <label class="filter-toggle">
+            <input type="checkbox" id="browseVector" onchange="browseSearch()">
+            Vector (semantic) search
+          </label>
+          <div class="filter-actions">
+            <button class="searchide-btn" onclick="browseExport('markdown')">Export MD</button>
+            <button class="searchide-btn" onclick="browseExport('json')">Export JSON</button>
+            <button class="searchide-btn danger" onclick="browseReset()">Reset All</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tag cloud toggle -->
+      <div class="browse-tags-section">
+        <div class="browse-tags-header" onclick="toggleTagCloud()">
+          <span class="browse-tags-toggle" id="browseTagsToggle">▸ Tags</span>
+          <span class="browse-tags-count" id="browseTagsCount"></span>
+        </div>
+        <div class="tag-cloud" id="browseTagCloud" style="display:none;">
+        </div>
+      </div>
+
+      <div class="tag-bar" id="tagBar">
+        <span class="tag-bar-label">Tags:</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Browse View -->
+  <div id="browseView">
+    <div class="results-header">
+      <span id="resultCount"></span>
+      <button id="starredFilter" class="starred-badge" onclick="toggleStarredFilter()">☆ Starred</button>
+    </div>
+    <div id="results"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+
+  <!-- Ask Pliny Panel -->
+  <div class="ask-panel" id="askPanel" style="display:none;">
+    <div class="ask-header" onclick="toggleAskPanel()">
+      <span class="ask-header-toggle" id="askToggle">▸</span>
+      <span class="ask-header-title">Ask Pliny</span>
+    </div>
+    <div class="ask-body" id="askBody" style="display:none;">
+      <div class="ask-input-row">
+        <input class="ask-input" id="askInput" type="text"
+               placeholder="Ask a question about your knowledge base..." autocomplete="off"
+               onkeydown="if(event.key==='Enter')askPliny()">
+        <button class="ask-btn" id="askBtn" onclick="askPliny()">Ask</button>
+      </div>
+      <div class="ask-status" id="askStatus"></div>
+      <div class="ask-answer" id="askAnswer" style="display:none;"></div>
+      <div class="ask-sources" id="askSources" style="display:none;"></div>
+      <div class="ask-error" id="askError" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- Graph View -->
+  <div id="graphView" style="display:none;">
+    <div class="search-box graph-search-box">
+      <input class="search-input graph-search-input" id="graphSearch" type="text" placeholder="Search graph nodes..." oninput="filterGraphNodes(this.value)">
+    </div>
+    <div class="graph-controls">
+      <label>Min tag frequency:</label>
+      <input type="range" id="minCountSlider" min="1" max="20" value="3"
+             oninput="graphMinCount=+this.value; document.getElementById('minCountVal').textContent=this.value">
+      <span id="minCountVal" class="slider-value">3</span>
+      <label class="graph-label-gap">Max edges:</label>
+      <input type="range" id="maxEdgesSlider" min="50" max="1000" value="200" step="50"
+             oninput="graphMaxEdges=+this.value; document.getElementById('maxEdgesVal').textContent=this.value">
+      <span id="maxEdgesVal" class="slider-value">200</span>
+      <button class="graph-refresh-btn" style="margin-left:auto;" onclick="loadGraph()">🔄 Refresh</button>
+      <span class="selected-tag" id="graphSelectedTag"></span>
+    </div>
+    <div id="graph-container">
+      <div class="graph-tooltip" id="graphTooltip"></div>
+    </div>
+  </div>
+
+  <!-- Pipeline View -->
+  <div id="pipelineView" style="display:none;">
+    <div class="stat-row" id="statCards"></div>
+
+    <div class="pipeline-section">
+      <h3>Pipeline Health</h3>
+      <div class="pipeline-grid">
+        <div class="pipeline-item">
+          <span class="label">X/Twitter Enrichment</span>
+          <div id="enrichmentSummary"><span class="value">Loading...</span></div>
+          <div class="progress-bar"><div class="progress-fill" id="enrichmentBar" style="width:0%"></div></div>
+          <span class="sub"><span id="enrichmentCron">-</span></span>
+        </div>
+        <div class="pipeline-item">
+          <span class="label">Ingestion</span>
+          <span class="value" id="ingestValue">-</span>
+          <span class="sub">Last import: <span id="lastImport">-</span></span>
+          <span class="sub">30-day avg: <span id="dailyAvg">-</span> entries/day</span>
+        </div>
+        <div class="pipeline-item">
+          <span class="label">Content</span>
+          <span class="value" id="contentValue">-</span>
+          <span class="sub">Thin entries: <span id="thinCount">-</span></span>
+        </div>
+        <div class="pipeline-item">
+          <span class="label">Dead Entries</span>
+          <span class="value" id="deadValue">-</span>
+          <span class="sub">Broken/tiny entries needing cleanup</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add URL -->
+    <div class="pipeline-section">
+      <h3>Add URL</h3>
+      <textarea id="addUrlInput" class="pipeline-textarea" placeholder="Paste URLs, one per line..."></textarea>
+      <div class="pipeline-action-row" style="margin-top:8px;">
+        <button class="searchide-btn primary" onclick="addUrls()">Ingest</button>
+        <span id="addUrlStatus" class="pipeline-status"></span>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="pipeline-section">
+        <h3>Source Distribution</h3>
+        <div id="domainChart"></div>
+      </div>
+      <div class="pipeline-section">
+        <h3>Daily Activity (last 14 days)</h3>
+        <div id="dailyChart"></div>
+      </div>
+    </div>
+
+    <!-- Maintenance & Cleanup -->
+    <div class="pipeline-section">
+      <h3>Maintenance</h3>
+      <div class="pipeline-action-col">
+        <div class="pipeline-action-row">
+          <button class="searchide-btn" onclick="runPipelineAction('enrich')" style="min-width:180px;">Run Enrichment</button>
+          <span id="pipelineStatus-enrich" class="pipeline-status"></span>
+        </div>
+        <div class="pipeline-action-row">
+          <button class="searchide-btn" onclick="runPipelineAction('embed')" style="min-width:180px;">Re-embed Vectors</button>
+          <span id="pipelineStatus-embed" class="pipeline-status"></span>
+        </div>
+        <div class="pipeline-action-row">
+          <button class="searchide-btn" onclick="runPipelineAction('retag')" style="min-width:180px;">Re-tag All</button>
+          <span id="pipelineStatus-retag" class="pipeline-status"></span>
+        </div>
+        <div class="pipeline-action-row">
+          <button class="searchide-btn" onclick="runPipelineAction('synthesize')" style="min-width:180px;">Run Synthesis</button>
+          <span id="pipelineStatus-synthesize" class="pipeline-status"></span>
+        </div>
+      </div>
+
+      <h3 class="gap-top">Cleanup</h3>
+      <div class="pipeline-action-col">
+        <div class="pipeline-action-row">
+          <button class="searchide-btn danger" onclick="runPipelineAction('cleanup-dead')" style="min-width:180px;">Delete Dead Entries</button>
+          <span id="pipelineStatus-cleanup-dead" class="pipeline-status"></span>
+        </div>
+        <div class="pipeline-action-row">
+          <button class="searchide-btn" onclick="runPipelineAction('re-extract-thin')" style="min-width:180px;">Re-extract Thin</button>
+          <span id="pipelineStatus-re-extract-thin" class="pipeline-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pipeline-section">
+      <h3>Top Tags</h3>
+      <div id="topTags"></div>
+    </div>
+
+    <div class="pipeline-section">
+      <h3>Recent Activity</h3>
+      <div class="activity-list" id="activityList"></div>
+    </div>
+  </div>
+
+<!-- Command palette -->
+<div class="command-overlay" id="cmdOverlay" onclick="cmdClose()"></div>
+<div class="command-palette" id="cmdPalette">
+  <div class="command-input-wrap">
+    <span class="prefix">/</span>
+    <input class="command-input" id="cmdInput" type="text" placeholder="command, or type anything to ask Pliny..." autocomplete="off" spellcheck="false">
+  </div>
+  <div class="command-actions" id="cmdActions"></div>
+  <div class="command-feedback" id="cmdFeedback" style="display:none;"></div>
+</div>
+<span class="cmd-hint">Press <kbd>⌘/</kbd> or <kbd>Ctrl+/</kbd> for commands</span>
+<button class="ask-header-btn" onclick="openAskPanel()" title="Ask Pliny about your knowledge base">💬 Ask</button>
+
+<!-- Info panel (inquisitive click) -->
+<div class="info-overlay" id="infoOverlay" onclick="closeInfoPanel()"></div>
+<div class="info-panel" id="infoPanel">
+  <div class="info-header">
+    <h2 id="infoTitle">Tag</h2>
+    <button class="info-close" onclick="closeInfoPanel()">&times;</button>
+  </div>
+  <div class="info-body" id="infoBody">
+    <div class="loading"><div class="spinner"></div>Loading...</div>
+  </div>
+</div>
+
+<!-- Detail modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-meta-bar" id="modalMetaBar"></div>
+    <div class="modal-meta" id="modalMeta"></div>
+    <div id="modalTypeBadge" class="modal-type-badge-area"></div>
+    <div class="modal-tags" id="modalTags"></div>
+    <div class="modal-source-refs" id="modalSourceRefs" style="display:none;"></div>
+    <div class="modal-summary" id="modalSummary"></div>
+    <div class="modal-content" id="modalContent"></div>
+    <div class="modal-related-section" id="relatedEntries">
+      <h4>Related Entries</h4>
+      <div id="relatedListModal">
+        <span class="text-dim" style="font-size: 0.85rem;">Loading...</span>
+      </div>
+      <div id="exploreSimilarityBtn" style="margin-top:12px;text-align:right;"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/pliny.js"></script>
+</body>
+</html>
