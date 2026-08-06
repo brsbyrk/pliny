@@ -45,8 +45,8 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Command::Ingest { url } => {
-            tracing::info!("Ingesting: {url}");
-            // TODO: extract + store
+            let config = pliny::config::Config::from_env();
+            commands::ingest(&config, &url).await?;
         }
         Command::Serve => {
             let config = pliny::config::Config::from_env();

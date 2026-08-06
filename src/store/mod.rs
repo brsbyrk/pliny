@@ -55,4 +55,31 @@ impl Store {
     pub fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
         self.conn.lock().expect("store lock poisoned")
     }
+
+    /// Insert a new entry into the database.
+    pub fn insert(&self, entry: &crate::core::Entry) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(
+            "INSERT OR REPLACE INTO entries (id, source_url, title, content, source_type, tags, created_at, modified_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+            rusqlite::params![
+                entry.id.to_string(),
+                entry.source_url,
+                entry.title,
+                entry.content,
+                entry.source_type.as_str(),
+                serde_json::to_string(&entry.tags)?,
+                entry.created_at.to_rfc3339(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Return the total number of entries.
+    pub fn count(&self) -> Result<usize> {
+        let conn = self.conn();
+        let count: usize = conn
+            .query_row("SELECT COUNT(*) FROM entries", [], |r| r.get(0))?;
+        Ok(count)
+    }
 }

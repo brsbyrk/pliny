@@ -191,6 +191,7 @@ struct RedditPost {
     #[serde(default)]
     subreddit: String,
     #[serde(default)]
+    #[allow(dead_code)]
     permalink: String,
     #[serde(default)]
     body: String,
