@@ -38,6 +38,11 @@ enum Command {
         /// Path to feeds file (one URL per line)
         file: String,
     },
+    /// Import bookmarks from browser/Pocket/Raindrop export
+    Import {
+        /// Path to import file
+        file: String,
+    },
 }
 
 #[tokio::main]
@@ -71,6 +76,10 @@ async fn main() -> anyhow::Result<()> {
         Command::Rss { file } => {
             let config = pliny::config::Config::from_env();
             commands::rss(&config, &file).await?;
+        }
+        Command::Import { file } => {
+            let config = pliny::config::Config::from_env();
+            commands::import_file(&config, &file).await?;
         }
     }
 

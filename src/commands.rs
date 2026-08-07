@@ -67,6 +67,32 @@ pub async fn rss(config: &pliny::config::Config, file: &str) -> Result<()> {
     monitor.run_loop(store).await
 }
 
+/// Import bookmarks from a file (browser export, Pocket, Raindrop).
+pub async fn import_file(config: &pliny::config::Config, path: &str) -> Result<()> {
+    let db_path = config.data_dir.join("pliny.db");
+    let store = pliny::store::Store::open(&db_path)?;
+    let file_path = std::path::Path::new(path);
+
+    if !file_path.exists() {
+        anyhow::bail!("File not found: {path}");
+    }
+
+    println!("Importing from: {path}");
+    println!("This may take a while (rate-limited at 2 URLs/second)...\n");
+
+    let stats = pliny::import::ingest_file(file_path, &store).await?;
+
+    println!("\nImport complete:");
+    println!("  Total:     {}", stats.total);
+    println!("  Imported:  {}", stats.imported);
+    println!("  Duplicates: {}", stats.duplicates);
+    if stats.errors > 0 {
+        println!("  Errors:    {}", stats.errors);
+    }
+
+    Ok(())
+}
+
 /// Save a manual note.
 pub async fn note(config: &pliny::config::Config, content: &str, title: Option<&str>) -> Result<()> {
     use pliny::core::{Entry, EntryId, SourceType};
