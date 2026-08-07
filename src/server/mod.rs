@@ -24,6 +24,7 @@ struct Assets;
 /// Shared application state.
 pub struct AppState {
     pub store: Store,
+    pub embedder: Option<crate::search::Embedder>,
 }
 
 /// Build the Axum router.
@@ -50,7 +51,20 @@ pub async fn serve(config: &Config) -> Result<()> {
     let count = store.count().unwrap_or(0);
     tracing::info!("Database: {} entries", count);
 
-    let state = Arc::new(AppState { store });
+    // Try loading embedding model
+    let embedder = crate::config::model_dir().and_then(|d| {
+        if crate::search::Embedder::is_available(&d) {
+            crate::search::Embedder::load(&d).ok()
+        } else {
+            None
+        }
+    });
+
+    if embedder.is_some() {
+        tracing::info!("Embeddings enabled (384-dim)");
+    }
+
+    let state = Arc::new(AppState { store, embedder });
     let app = router(state);
 
     let addr: SocketAddr = format!("{}:{}", config.bind_host, config.port).parse()?;
@@ -125,8 +139,18 @@ async fn ingest(
     match entry {
         Some(entry) => {
             let id = entry.id.to_string();
-            let inserted = state.store.insert(&entry)
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let inserted = if let Some(ref embedder) = state.embedder {
+                let text = crate::search::Embedder::embed_entry(&entry.title, &entry.content);
+                if let Ok(emb) = embedder.embed(&text) {
+                    state.store.insert_with_embedding(&entry, &emb)
+                } else {
+                    state.store.insert(&entry)
+                }
+            } else {
+                state.store.insert(&entry)
+            }
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
             Ok(Json(serde_json::json!({
                 "status": if inserted { "ingested" } else { "duplicate" },
                 "entry_id": id,
@@ -185,6 +209,14 @@ async fn create_note(
 
     state.store.insert(&entry)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Embed in background if model available
+    if let Some(ref embedder) = state.embedder {
+        let text = crate::search::Embedder::embed_entry(&entry.title, &entry.content);
+        if let Ok(emb) = embedder.embed(&text) {
+            let _ = state.store.insert_embedding(&id, &emb);
+        }
+    }
 
     Ok(Json(serde_json::json!({"status": "created", "entry_id": id})))
 }

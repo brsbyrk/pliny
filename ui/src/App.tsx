@@ -45,6 +45,7 @@ export default function App() {
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<Entry | null>(null);
   const [detailContent, setDetailContent] = useState<string | null>(null);
+  const [related, setRelated] = useState<Entry[] | null>(null);
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [captureOpen, setCaptureOpen] = useState(false);
   const [captureUrl, setCaptureUrl] = useState('');
@@ -157,7 +158,7 @@ export default function App() {
   };
 
   const openDetail = async (entry: Entry) => {
-    setDetail(entry); setDetailContent(null);
+    setDetail(entry); setDetailContent(null); setRelated(null);
     try {
       const r = await fetch(`${API}/api/entry/${entry.id}`);
       if (r.ok) {
@@ -167,6 +168,27 @@ export default function App() {
         setDetailContent(entry.snippet);
       }
     } catch { setDetailContent(entry.snippet); }
+    // Fetch related entries
+    try {
+      const r = await fetch(`${API}/api/entry/${entry.id}/related`);
+      if (r.ok) {
+        const d = await r.json();
+        if (d.related && d.related.length > 0) {
+          // Fetch titles for related IDs
+          const relatedEntries: Entry[] = [];
+          for (const rid of d.related.slice(0, 5)) {
+            try {
+              const rr = await fetch(`${API}/api/entry/${rid}`);
+              if (rr.ok) {
+                const rd = await rr.json();
+                relatedEntries.push({ id: rid, title: rd.title || rid, source_url: rd.source_url || '', source_type: rd.source_type || 'web', created_at: rd.created_at || '', snippet: '' });
+              }
+            } catch { /* skip */ }
+          }
+          setRelated(relatedEntries);
+        }
+      }
+    } catch { /* */ }
   };
 
   const filtered = sourceFilter === 'all' ? entries : entries.filter(e => e.source_type === sourceFilter);
@@ -373,7 +395,7 @@ export default function App() {
       )}
 
       {/* Detail dialog */}
-      <Dialog open={!!detail} onOpenChange={(open) => { if (!open) { setDetail(null); setDetailContent(null); } }}>
+      <Dialog open={!!detail} onOpenChange={(open) => { if (!open) { setDetail(null); setDetailContent(null); setRelated(null); } }}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           {detail && (
             <>
@@ -406,6 +428,23 @@ export default function App() {
                     )}
                 </div>
               </div>
+              {related && related.length > 0 && (
+                <div className="mt-4 pt-4 border-t">
+                  <h4 className="text-xs font-medium text-muted-foreground mb-2">Related</h4>
+                  <div className="flex flex-col gap-1.5">
+                    {related.map(r => (
+                      <a
+                        key={r.id}
+                        href="#"
+                        onClick={(e) => { e.preventDefault(); openDetail(r); }}
+                        className="text-sm text-muted-foreground hover:text-foreground truncate transition-colors"
+                      >
+                        {r.title}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </DialogContent>

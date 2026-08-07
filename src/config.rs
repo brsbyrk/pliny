@@ -60,3 +60,14 @@ fn dirs_next() -> Option<PathBuf> {
         .ok()
         .map(PathBuf::from)
 }
+
+/// Resolve the model directory from env or default ($HOME/.pliny/models).
+pub fn model_dir() -> Option<PathBuf> {
+    let path = std::env::var("PLINY_MODEL_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            let home = dirs_next().unwrap_or_else(|| PathBuf::from("."));
+            home.join(".pliny").join("models")
+        });
+    Some(path)
+}
