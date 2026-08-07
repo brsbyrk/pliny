@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Download all-MiniLM-L6-v2 and export to ONNX (opset 14, dynamo=false).
+"""Download all-MiniLM-L6-v2 ONNX model for Pliny embeddings.
+
+Downloads pre-exported ONNX model from HuggingFace (onnx-community)
+and tokenizer from sentence-transformers.
 
 Usage: python scripts/setup-model.py [--model-dir ~/.pliny/models]
 """
@@ -7,11 +10,28 @@ Usage: python scripts/setup-model.py [--model-dir ~/.pliny/models]
 import argparse
 import os
 import sys
+import urllib.request
 from pathlib import Path
+
+MODEL_URL = "https://huggingface.co/onnx-community/all-MiniLM-L6-v2-ONNX/resolve/main/onnx/model.onnx"
+MODEL_DATA_URL = "https://huggingface.co/onnx-community/all-MiniLM-L6-v2-ONNX/resolve/main/onnx/model.onnx_data"
+TOKENIZER_URL = "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/tokenizer.json"
+
+
+def download(url, dest, label):
+    if dest.exists():
+        print(f"  {label} already exists ({dest.stat().st_size / 1_000_000:.1f} MB)")
+        return
+    print(f"  Downloading {label}...")
+    try:
+        urllib.request.urlretrieve(url, dest)
+    except Exception as e:
+        print(f"  Failed: {e}")
+        sys.exit(1)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Setup embedding model for Pliny")
+    parser = argparse.ArgumentParser(description="Download embedding model for Pliny")
     parser.add_argument(
         "--model-dir",
         default=os.path.expanduser("~/.pliny/models"),
@@ -20,71 +40,20 @@ def main():
     args = parser.parse_args()
 
     model_dir = Path(args.model_dir) / "all-MiniLM-L6-v2"
-    model_path = model_dir / "model.onnx"
-    tokenizer_path = model_dir / "tokenizer.json"
-
-    if model_path.exists() and tokenizer_path.exists():
-        print(f"✓ Model already exists at {model_dir}")
-        print(f"  model.onnx:  {model_path.stat().st_size / 1_000_000:.1f} MB")
-        print(f"  tokenizer.json: {tokenizer_path.stat().st_size / 1000:.1f} KB")
-        return
-
-    print("Installing dependencies...")
-    os.system(f"{sys.executable} -m pip install -q sentence-transformers transformers torch onnx")
-
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Loading model from HuggingFace...")
-    from sentence_transformers import SentenceTransformer
-    import torch
+    print(f"Downloading model to {model_dir}/")
+    download(MODEL_URL, model_dir / "model.onnx", "model.onnx")
+    download(MODEL_DATA_URL, model_dir / "model.onnx_data", "model.onnx_data")
+    download(TOKENIZER_URL, model_dir / "tokenizer.json", "tokenizer.json")
 
-    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-
-    # Export to ONNX
-    print("Exporting to ONNX (opset=14, dynamo=False)...")
-    dummy_input = model.tokenizer(
-        "test sentence",
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
-        max_length=256,
-    )
-
-    # Get the underlying transformer model
-    transformer = model._first_module()
-
-    with torch.no_grad():
-        torch.onnx.export(
-            transformer,
-            (
-                dummy_input["input_ids"],
-                dummy_input["attention_mask"],
-                dummy_input.get("token_type_ids", torch.zeros_like(dummy_input["input_ids"])),
-            ),
-            str(model_path),
-            input_names=["input_ids", "attention_mask", "token_type_ids"],
-            output_names=["last_hidden_state"],
-            dynamic_axes={
-                "input_ids": {0: "batch", 1: "sequence"},
-                "attention_mask": {0: "batch", 1: "sequence"},
-                "token_type_ids": {0: "batch", 1: "sequence"},
-                "last_hidden_state": {0: "batch", 1: "sequence"},
-            },
-            opset_version=14,
-            dynamo=False,
-        )
-
-    # Save tokenizer
-    print("Saving tokenizer.json...")
-    model.tokenizer.save(str(tokenizer_path))
-
-    size_mb = model_path.stat().st_size / 1_000_000
-    print(f"\n✓ Model exported successfully!")
-    print(f"  {model_dir}/")
-    print(f"  ├── model.onnx       ({size_mb:.1f} MB)")
-    print(f"  └── tokenizer.json")
-    print(f"\nSet PLINY_MODEL_DIR={args.model_dir} to use embeddings.")
-    print(f"Or copy to default location: ~/.pliny/models/")
+    total_mb = sum(f.stat().st_size for f in model_dir.iterdir() if f.is_file()) / 1_000_000
+    print(f"\nModel ready: {model_dir}/")
+    for f in sorted(model_dir.iterdir()):
+        if f.is_file():
+            print(f"  {f.name} ({f.stat().st_size / 1_000_000:.1f} MB)")
+    print(f"  Total: {total_mb:.1f} MB")
+    print(f"\nEmbeddings are now available. Set PLINY_MODEL_DIR={args.model_dir}")
 
 
 if __name__ == "__main__":

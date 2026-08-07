@@ -15,7 +15,7 @@ enum Format {
 
 /// A parsed URL from an import file.
 #[derive(Debug)]
-struct ImportedLink {
+pub struct ImportedLink {
     url: String,
     title: String,
     tags: Vec<String>,

@@ -1,6 +1,7 @@
 //! Search engine — FTS5, vector, and hybrid RRF.
 
 mod embed;
+pub use embed::{Embedder, EMBEDDING_DIM};
 
 use anyhow::Result;
 use rusqlite::params;
