@@ -24,7 +24,7 @@ async fn req_json(app: &axum::Router, method: &str, uri: &str, body: Option<Stri
 }
 
 fn make_app() -> axum::Router {
-    let store = Store::open_in_memory().unwrap();
+    let store = std::sync::Arc::new(Store::open_in_memory().unwrap());
     let state = std::sync::Arc::new(pliny::server::AppState { store, embedder: None });
     pliny::server::router(state)
 }

@@ -23,7 +23,7 @@ struct Assets;
 
 /// Shared application state.
 pub struct AppState {
-    pub store: Store,
+    pub store: Arc<Store>,
     pub embedder: Option<crate::search::Embedder>,
 }
 
@@ -52,7 +52,7 @@ pub fn router(state: Arc<AppState>) -> Router {
 /// Start the server.
 pub async fn serve(config: &Config) -> Result<()> {
     let db_path = config.data_dir.join("pliny.db");
-    let store = Store::open(&db_path)?;
+    let store = Arc::new(Store::open(&db_path)?);
     let count = store.count().unwrap_or(0);
     tracing::info!("Database: {} entries", count);
 
@@ -69,7 +69,11 @@ pub async fn serve(config: &Config) -> Result<()> {
         tracing::info!("Embeddings enabled (384-dim)");
     }
 
-    let state = Arc::new(AppState { store, embedder });
+    let state = Arc::new(AppState { store: store.clone(), embedder });
+
+    // Start Telegram bot if token is set
+    crate::message_source::start_bots(state.store.clone());
+
     let app = router(state);
 
     let addr: SocketAddr = format!("{}:{}", config.bind_host, config.port).parse()?;

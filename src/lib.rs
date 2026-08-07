@@ -7,6 +7,7 @@ pub mod core;
 pub mod extractors;
 pub mod feed;
 pub mod import;
+pub mod message_source;
 pub mod search;
 pub mod server;
 pub mod store;
