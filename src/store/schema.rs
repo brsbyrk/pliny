@@ -56,6 +56,19 @@ CREATE VIRTUAL TABLE IF NOT EXISTS entries_v0 USING vec0(
 CREATE INDEX IF NOT EXISTS idx_entries_created_at ON entries(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_entries_source_type ON entries(source_type);
 CREATE INDEX IF NOT EXISTS idx_entries_starred ON entries(starred) WHERE starred = 1;
+
+-- Collections
+CREATE TABLE IF NOT EXISTS collections (
+    id   TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS collection_entries (
+    collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+    entry_id      TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+    PRIMARY KEY (collection_id, entry_id)
+);
 "#;
 
 fn run_migrations(_conn: &Connection) -> Result<()> {

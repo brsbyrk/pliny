@@ -242,6 +242,63 @@ impl Store {
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
+
+    /// Create a new collection.
+    pub fn create_collection(&self, name: &str) -> Result<String> {
+        let conn = self.conn();
+        let id = format!("col-{}", name.to_lowercase().replace(' ', "-"));
+        conn.execute(
+            "INSERT OR IGNORE INTO collections (id, name) VALUES (?1, ?2)",
+            rusqlite::params![id, name],
+        )?;
+        Ok(id)
+    }
+
+    /// List all collections.
+    pub fn list_collections(&self) -> Result<Vec<(String, String, usize)>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT c.id, c.name, COUNT(ce.entry_id)
+             FROM collections c LEFT JOIN collection_entries ce ON c.id = ce.collection_id
+             GROUP BY c.id ORDER BY c.created_at DESC"
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Add an entry to a collection.
+    pub fn add_to_collection(&self, collection_id: &str, entry_id: &str) -> Result<bool> {
+        let conn = self.conn();
+        let changes = conn.execute(
+            "INSERT OR IGNORE INTO collection_entries (collection_id, entry_id) VALUES (?1, ?2)",
+            rusqlite::params![collection_id, entry_id],
+        )?;
+        Ok(changes > 0)
+    }
+
+    /// Get entries in a collection.
+    pub fn get_collection_entries(&self, collection_id: &str, limit: usize) -> Result<Vec<crate::search::SearchResult>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT e.id, e.title, e.source_url, e.source_type, e.created_at, e.starred,
+                    coalesce(e.tags, '[]'), substr(e.content, 1, 200)
+             FROM entries e
+             JOIN collection_entries ce ON e.id = ce.entry_id
+             WHERE ce.collection_id = ?1
+             ORDER BY e.created_at DESC LIMIT ?2"
+        )?;
+        let rows = stmt.query_map(rusqlite::params![collection_id, limit], |row| {
+            let tags_str: String = row.get(6).unwrap_or_default();
+            Ok(crate::search::SearchResult {
+                id: row.get(0)?, title: row.get(1)?, source_url: row.get(2)?,
+                source_type: row.get(3)?, created_at: row.get(4)?,
+                starred: row.get::<_, i32>(5)? != 0,
+                snippet: row.get(7)?,
+                tags: serde_json::from_str(&tags_str).unwrap_or_default(),
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
 }
 
 /// Knowledge base statistics.

@@ -39,6 +39,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/ingest/add-url", post(ingest))
         .route("/api/notes", post(create_note))
         .route("/api/stats", get(stats))
+        .route("/api/collections", get(list_collections).post(create_collection))
+        .route("/api/collection/{id}/add", post(add_to_collection))
         .route("/api/random", get(random))
         .route("/api/on-this-day", get(on_this_day))
         // Serve embedded frontend (SPA fallback)
@@ -342,6 +344,41 @@ async fn related_entries(
 }
 
 // ── Static file serving ────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct CollectionBody { name: Option<String>, entry_id: Option<String> }
+
+async fn list_collections(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let cols = state.store.list_collections()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let items: Vec<_> = cols.into_iter().map(|(id, name, count)| {
+        serde_json::json!({"id": id, "name": name, "count": count})
+    }).collect();
+    Ok(Json(serde_json::json!({"collections": items})))
+}
+
+async fn create_collection(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<CollectionBody>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let name = body.name.ok_or(StatusCode::BAD_REQUEST)?;
+    let id = state.store.create_collection(&name)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(serde_json::json!({"id": id, "name": name})))
+}
+
+async fn add_to_collection(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    Json(body): Json<CollectionBody>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let entry_id = body.entry_id.ok_or(StatusCode::BAD_REQUEST)?;
+    let added = state.store.add_to_collection(&id, &entry_id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(serde_json::json!({"added": added})))
+}
 
 async fn serve_index() -> impl IntoResponse {
     serve_asset("index.html")
