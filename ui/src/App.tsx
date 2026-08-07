@@ -51,7 +51,7 @@ export default function App() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [captureUrl, setCaptureUrl] = useState('');
   const [capturing, setCapturing] = useState(false);
-  const [month, setMonth] = useState<string | null>(null); // "YYYY-MM" or null=all
+  const [month, setMonth] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
@@ -127,6 +127,27 @@ export default function App() {
     clearTimeout(debounceRef.current);
     setPage(1);
     fetchEntries(query, 1);
+  };
+
+  const addToCol = async (entryId: string) => {
+    const r = await fetch(`${API}/api/collections`);
+    if (!r.ok) return;
+    const cols = ((await r.json()).collections || []) as {id:string,name:string,count:number}[];
+    const name = prompt(`Add to collection...\n\nExisting: ${cols.map(c => c.name).join(', ') || 'none'}\n\nEnter name (new or existing):`);
+    if (!name) return;
+    let col = cols.find(c => c.name.toLowerCase() === name.toLowerCase());
+    if (!col) {
+      const cr = await fetch(`${API}/api/collections`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (!cr.ok) return;
+      col = await cr.json();
+    }
+    await fetch(`${API}/api/collection/${col!.id}/add`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entry_id: entryId }),
+    });
   };
 
   const doToggleStar = async (id: string) => {
@@ -402,14 +423,6 @@ export default function App() {
                     <div className="text-sm font-medium leading-snug truncate mb-1">
                       {entry.title}
                     </div>
-
-                  <button
-                    onClick={(e) => { e.stopPropagation(); doToggleStar(entry.id); }}
-                    className={`shrink-0 mt-0.5 text-sm hover:scale-110 transition-transform ${entry.starred ? 'text-yellow-400' : 'text-muted-foreground/30'}`}
-                    title={entry.starred ? 'Unstar' : 'Star'}
-                  >
-                    ★
-                  </button>
                     <div
                       className="text-xs text-muted-foreground leading-relaxed line-clamp-2"
                       dangerouslySetInnerHTML={{ __html: entry.snippet }}
@@ -422,6 +435,20 @@ export default function App() {
                       </div>
                     )}
                   </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); doToggleStar(entry.id); }}
+                    className={`shrink-0 mt-0.5 text-sm hover:scale-110 transition-transform ${entry.starred ? 'text-yellow-400' : 'text-muted-foreground/30'}`}
+                    title={entry.starred ? 'Unstar' : 'Star'}
+                  >
+                    ★
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); addToCol(entry.id); }}
+                    className="shrink-0 mt-0.5 text-xs text-muted-foreground/25 hover:text-muted-foreground transition-colors"
+                    title="Add to collection"
+                  >
+                    📁
+                  </button>
                   <span className="text-[10px] text-muted-foreground/50 whitespace-nowrap mt-1 tabular-nums">
                     {timeAgo(entry.created_at)}
                   </span>
