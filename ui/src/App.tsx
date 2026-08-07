@@ -21,11 +21,11 @@ interface Stats { total_entries: number; }
 
 const API = '';
 const PER_PAGE = 24;
-const SOURCE_TYPES = ['all', 'web', 'x', 'youtube', 'github', 'reddit'] as const;
+const SOURCE_TYPES = ['all', 'web', 'x', 'youtube', 'github', 'reddit', 'note'] as const;
 type SourceFilter = (typeof SOURCE_TYPES)[number];
 type Theme = 'dark' | 'light';
 
-const SRC_LABELS: Record<string, string> = { x: 'X', youtube: 'YT', github: 'GH', reddit: 'Reddit', web: 'Web', feed: 'Feed' };
+const SRC_LABELS: Record<string, string> = { x: 'X', youtube: 'YT', github: 'GH', reddit: 'Reddit', web: 'Web', feed: 'Feed', note: 'Note' };
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -49,6 +49,10 @@ export default function App() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [captureUrl, setCaptureUrl] = useState('');
   const [capturing, setCapturing] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [noteTitle, setNoteTitle] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === 'undefined') return 'dark';
@@ -130,6 +134,28 @@ export default function App() {
     finally { setCapturing(false); }
   };
 
+  const doSaveNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!noteText.trim()) return;
+    setSavingNote(true);
+    try {
+      const r = await fetch(`${API}/api/notes`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: noteText.trim(),
+          title: noteTitle.trim() || undefined,
+        }),
+      });
+      const d = await r.json();
+      if (d.status === 'created') {
+        setNoteText(''); setNoteTitle(''); setNoteOpen(false);
+        fetchEntries(query, page); fetchStats();
+        showToast('✓ Note saved');
+      }
+    } catch { showToast('Error'); }
+    finally { setSavingNote(false); }
+  };
+
   const openDetail = async (entry: Entry) => {
     setDetail(entry); setDetailContent(null);
     try {
@@ -148,7 +174,7 @@ export default function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setDetail(null); setDetailContent(null); setCaptureOpen(false); }
+      if (e.key === 'Escape') { setDetail(null); setDetailContent(null); setCaptureOpen(false); setNoteOpen(false); }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); searchRef.current?.focus(); }
       if (e.key === '/' && document.activeElement !== searchRef.current) {
         e.preventDefault(); searchRef.current?.focus(); searchRef.current?.select();
@@ -171,9 +197,12 @@ export default function App() {
           )}
         </div>
         <div className="flex gap-2">
-          <Button variant="default" size="sm" onClick={() => setCaptureOpen(!captureOpen)}>
+          <Button variant="default" size="sm" onClick={() => { setCaptureOpen(!captureOpen); setNoteOpen(false); }}>
             {captureOpen ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
             {captureOpen ? '' : 'Capture'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => { setNoteOpen(!noteOpen); setCaptureOpen(false); }}>
+            {noteOpen ? <X className="h-3.5 w-3.5" /> : 'Note'}
           </Button>
           <Button
             variant="ghost" size="icon"
@@ -197,6 +226,28 @@ export default function App() {
           />
           <Button type="submit" disabled={capturing || !captureUrl.trim()} size="sm">
             {capturing ? 'Saving...' : 'Save'}
+          </Button>
+        </form>
+      )}
+
+      {/* Note form */}
+      {noteOpen && (
+        <form onSubmit={doSaveNote} className="flex flex-col gap-2 mb-4 animate-fade-in">
+          <Input
+            type="text"
+            value={noteTitle}
+            onChange={e => setNoteTitle(e.target.value)}
+            placeholder="Title (optional)"
+            autoFocus
+          />
+          <textarea
+            value={noteText}
+            onChange={e => setNoteText(e.target.value)}
+            placeholder="Write your note..."
+            className="flex min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-y"
+          />
+          <Button type="submit" disabled={savingNote || !noteText.trim()} size="sm" className="self-end">
+            {savingNote ? 'Saving...' : 'Save Note'}
           </Button>
         </form>
       )}

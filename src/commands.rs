@@ -66,3 +66,50 @@ pub async fn rss(config: &pliny::config::Config, file: &str) -> Result<()> {
 
     monitor.run_loop(store).await
 }
+
+/// Save a manual note.
+pub async fn note(config: &pliny::config::Config, content: &str, title: Option<&str>) -> Result<()> {
+    use pliny::core::{Entry, EntryId, SourceType};
+
+    let title = title
+        .map(|t| t.to_string())
+        .unwrap_or_else(|| {
+            content.lines().next()
+                .unwrap_or("Untitled")
+                .chars().take(80).collect()
+        });
+
+    let slug = title
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == ' ' || *c == '-')
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join("-");
+
+    let id = format!("note-{}-{}", slug, &chrono::Utc::now().timestamp() % 100000);
+
+    let entry = Entry {
+        id: EntryId(id),
+        source_url: String::new(),
+        title,
+        content: content.to_string(),
+        source_type: SourceType::Note,
+        tags: Vec::new(),
+        created_at: chrono::Utc::now(),
+    };
+
+    let db_path = config.data_dir.join("pliny.db");
+    let store = pliny::store::Store::open(&db_path)?;
+
+    let inserted = store.insert(&entry)?;
+    println!(
+        "{} note: {} ({} chars)",
+        if inserted { "Saved" } else { "Already exists" },
+        entry.title,
+        entry.content.len()
+    );
+
+    Ok(())
+}

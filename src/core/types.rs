@@ -17,6 +17,8 @@ pub enum SourceType {
     Web,
     /// RSS/Atom feed entry
     Feed,
+    /// Manual note — user-written text, no URL
+    Note,
 }
 
 impl SourceType {
@@ -48,6 +50,7 @@ impl SourceType {
             Self::Reddit => "reddit",
             Self::Web => "web",
             Self::Feed => "feed",
+            Self::Note => "note",
         }
     }
 }

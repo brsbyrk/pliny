@@ -1,88 +1,89 @@
 # Pliny — Implementation Plan
 
-> **Goal:** Personal knowledge engine — capture anything, search everything, single Rust binary.
+> **Goal:** Personal knowledge engine — capture anything, search everything. Single Rust binary.
 
-**Architecture:** Single crate with strict modules. Trait-based extractor system. SQLite + FTS5 + vec0 for storage. Axum for server. `pliny ingest|serve|search|rss` CLI.
-
-**Tech Stack:** Rust 2021, tokio, axum, rusqlite (bundled), sqlite-vec, reqwest, readability, feed-rs, ort (ONNX), clap.
+**Architecture:** Single crate, strict modules. Extractors (trait + enrich), SQLite+FTS5+vec0, Axum, React+shadcn+Tailwind.
 
 ---
 
-## Completed
+## Done ✅
 
-| # | Feature | Status |
+| # | Task | Tests |
 |---|---|---|
-| 0 | Scaffold: Cargo.toml, module structure, types, traits, config, store schema, CLI stubs | ✅ |
+| 0 | Scaffold: Cargo.toml, module structure, traits, CLI | — |
+| 1 | Web extractor (readability) | 6 |
+| 2 | X extractor (og:meta + fxtwitter enrichment) | 17 |
+| 3 | GitHub extractor (raw README + API fallback) | 14 |
+| 4 | Reddit extractor (JSON API, comments) | 11 |
+| 5 | YouTube extractor (oembed + timedtext captions) | 11 |
+| 6 | FTS5 search (BM25, snippets, search CLI) | 5 |
+| 7 | Axum server (API + embedded React SPA) | — |
+| 8 | Dashboard (shadcn/ui + Tailwind, light/dark theme) | — |
+| 9 | Browser extension (popup + context menu) | — |
+| 10 | RSS/Atom feed monitor (feed-rs, dedup, auto-ingest) | 3 |
+| 11 | Dedup (URL check before insert, duplicate toast) | — |
+| 12 | Tags in UI (badges, coalesce) | — |
+| 13 | Live search (300ms debounce, keyboard shortcuts) | — |
+| 14 | Entry detail modal (full content from API) | — |
+| 15 | Embedding stub (ONNX-ready interface) | 3 |
+
+**Total: 69 tests, 0 warnings, 1 binary.**
 
 ---
 
-## Phase 1: Capture Engine ✅
+## In Progress / Next
 
-### Task 1: Web Extractor ✅
-> Readability-based HTML extraction. 6 tests.
+### Phase 6: Manual Notes
 
-### Task 2: X/Twitter Extractor ✅
-> og:meta primary + fxtwitter enrichment. 17 tests (8 parsing + 2 JSON + 7 integration).
+**Goal:** Add arbitrary text as entries without a URL.
 
-### Task 3: GitHub Extractor ✅
-> Raw README (main→master) + API fallback. 14 tests (6 parsing + 4 integration + 4 API).
+```rust
+SourceType::Note  // new variant
+```
 
-### Task 4: Reddit Extractor ✅
-> JSON API (no auth) with comment extraction. 11 tests (7 parsing/formatting + 4 integration).
+- [ ] `pliny note "content" [--title "..."]` — saves directly
+- [ ] Textarea in dashboard — "Write a note" button
+- [ ] Notes appear in search/browse like any entry
+- [ ] Notes have no source_url (or `/notes/{id}` placeholder)
 
-### Task 5: YouTube Extractor ✅
-> oembed metadata + timedtext captions (no yt-dlp). 11 tests (8 parsing + 3 integration).
+### Phase 7: Full Embeddings + Vector Search
 
-**Total: 55 tests, all pass. 0 warnings.**
+**Goal:** ONNX inference (all-MiniLM-L6-v2) → vec0 ANN search → RRF fusion.
 
----
+- [ ] Download model script (`pliny setup-model` or `make model`)
+- [ ] Finish ONNX inference in `src/search/embed.rs`
+- [ ] Embed on ingest (async, background)
+- [ ] `Store::search_vec()` — vec0 ANN via sqlite-vec
+- [ ] `Store::search_hybrid()` — RRF fusion of FTS5 + vector results
 
-## Phase 2: Search
+### Phase 8: Related Entries
 
-### Task 7: FTS5 Search
+**Goal:** Click any entry → "Related" panel with top-5 nearest neighbors.
 
-> Full-text search via SQLite FTS5 with BM25 ranking and snippets.
+- [ ] `GET /api/entry/{id}/related` — vector similarity
+- [ ] "Related" section in detail modal
+- [ ] Falls back gracefully when no embeddings available
 
-### Task 8: Embeddings + Vector Search
+### Phase 9: Importers
 
-> ONNX inference (all-MiniLM-L6-v2) → vec0 ANN search via sqlite-vec.
+**Goal:** Bulk import from existing knowledge tools.
 
-### Task 9: Hybrid RRF
+- [ ] Pocket export (HTML file)
+- [ ] Browser bookmarks (HTML export)
+- [ ] Raindrop export (CSV)
+- [ ] `pliny import <file>` command
 
-> Reciprocal rank fusion of FTS5 + vector results.
+### Phase 10: Synthesis (v0.2+)
 
----
+**Goal:** LLM-powered "connect these entries" via DeepSeek API.
 
-## Phase 3: Server + UX
+- [ ] `POST /api/synthesis` — takes entry IDs + prompt
+- [ ] DeepSeek API integration
+- [ ] Synthesis results page in dashboard
 
-### Task 10: REST API
+### Polish
 
-> Axum routes: GET /api/entries (search), POST /api/ingest (capture from extension), GET /api/stats.
-
-### Task 11: Dashboard
-
-> Port Python v0.3 dashboard (index.html, pliny.css, pliny.js, command-bar.css) to Rust static serving.
-
-### Task 12: Browser Extension
-
-> Update extension to point to new Axum backend. Add real icons.
-
----
-
-## Phase 4: Feed Monitor
-
-### Task 13: RSS/Atom Feed Monitor
-
-> Poll feeds via `feed-rs`, dedup against store, auto-ingest new entries.
-
----
-
-## Phase 5: Polish
-
-### Task 14: Importers
-
-> Import from browser bookmarks, Pocket export, Raindrop export.
-
-### Task 15: Synthesis
-
-> On-demand cross-pollination: "connect these three entries." LLM-powered via DeepSeek API.
+- [ ] Browser extension real icons
+- [ ] `pliny stats` CLI — source type breakdown
+- [ ] Tags as first-class: autocomplete, filter by tag
+- [ ] Offline content storage (full HTML archive)

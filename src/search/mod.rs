@@ -113,6 +113,8 @@ impl Store {
                         "github" => crate::core::SourceType::GitHub,
                         "reddit" => crate::core::SourceType::Reddit,
                         "feed" => crate::core::SourceType::Feed,
+                        "" => crate::core::SourceType::Note,
+                        "note" => crate::core::SourceType::Note,
                         _ => crate::core::SourceType::Web,
                     }
                 },

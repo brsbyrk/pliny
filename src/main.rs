@@ -18,6 +18,14 @@ enum Command {
         /// URL to capture
         url: String,
     },
+    /// Save a manual note
+    Note {
+        /// Note content
+        content: String,
+        /// Optional title (default: first line)
+        #[arg(short, long)]
+        title: Option<String>,
+    },
     /// Start the dashboard server
     Serve,
     /// Search your knowledge base
@@ -47,6 +55,10 @@ async fn main() -> anyhow::Result<()> {
         Command::Ingest { url } => {
             let config = pliny::config::Config::from_env();
             commands::ingest(&config, &url).await?;
+        }
+        Command::Note { content, title } => {
+            let config = pliny::config::Config::from_env();
+            commands::note(&config, &content, title.as_deref()).await?;
         }
         Command::Serve => {
             let config = pliny::config::Config::from_env();

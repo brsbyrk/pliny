@@ -34,6 +34,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/entries", get(search))
         .route("/api/entry/{id}", get(get_entry))
         .route("/api/ingest/add-url", post(ingest))
+        .route("/api/notes", post(create_note))
         .route("/api/stats", get(stats))
         // Serve embedded frontend (SPA fallback)
         .route("/", get(serve_index))
@@ -142,6 +143,49 @@ async fn stats(
     let count = state.store.count()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(serde_json::json!({"total_entries": count})))
+}
+
+#[derive(Deserialize)]
+struct NoteRequest {
+    content: String,
+    #[serde(default)]
+    title: Option<String>,
+}
+
+async fn create_note(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<NoteRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let title = body.title.unwrap_or_else(|| {
+        body.content.lines().next()
+            .unwrap_or("Untitled")
+            .chars().take(80).collect()
+    });
+
+    let slug = title.to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric() || c == ' ' || c == '-')
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join("-");
+
+    let id = format!("note-{}-{}", slug, chrono::Utc::now().timestamp() % 100000);
+
+    let entry = pliny::core::Entry {
+        id: pliny::core::EntryId(id.clone()),
+        source_url: String::new(),
+        title,
+        content: body.content,
+        source_type: pliny::core::SourceType::Note,
+        tags: Vec::new(),
+        created_at: chrono::Utc::now(),
+    };
+
+    state.store.insert(&entry)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(serde_json::json!({"status": "created", "entry_id": id})))
 }
 
 async fn get_entry(
