@@ -162,7 +162,7 @@ export default function App() {
       <form onSubmit={doSearch} className="mb-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input ref={searchRef} type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search... (/ to focus)" className="pl-9" />
+          <Input ref={searchRef} type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search... (/ to focus)" className="pl-9" autoFocus />
         </div>
       </form>
 
@@ -197,7 +197,7 @@ export default function App() {
                 onClick={() => openDetail(entry)}>
                 <CardContent className="p-3 flex gap-3 items-start">
                   <Badge variant="outline" className="h-5 w-5 p-0 flex items-center justify-center shrink-0 mt-0.5 text-[10px]">
-                    {(entry.source_type || 'web').substring(0,1).toUpperCase()}
+                    {SRC_LABELS[entry.source_type]?.substring(0,1) || 'W'}
                   </Badge>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium leading-snug truncate mb-1">{entry.title}</div>
@@ -214,11 +214,13 @@ export default function App() {
               </Card>
             ))}
           </div>
-          <div className="flex justify-center gap-2 mt-5 pt-4 border-t">
+          {entries.length >= PER_PAGE && (
+            <div className="flex justify-center gap-2 mt-5 pt-4 border-t">
             <Button variant="outline" size="sm" onClick={() => { const p = Math.max(1, page - 1); setPage(p); fetchEntries(query, p); }} disabled={page <= 1}>Prev</Button>
             <span className="text-xs text-muted-foreground flex items-center tabular-nums">Page {page}</span>
             <Button variant="outline" size="sm" onClick={() => { const p = page + 1; setPage(p); fetchEntries(query, p); }} disabled={entries.length < PER_PAGE}>Next</Button>
           </div>
+          )}
         </>
       )}
 

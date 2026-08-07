@@ -9,12 +9,11 @@ use axum::{
     Router,
 };
 use rust_embed::RustEmbed;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crate::config::Config;
-use crate::search::SearchResult;
 use crate::store::Store;
 
 /// Embedded React frontend (ui/dist/).
@@ -36,9 +35,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/entry/{id}", get(get_entry))
         .route("/api/ingest/add-url", post(ingest))
         .route("/api/stats", get(stats))
-        // Serve embedded frontend
-        .route("/{*path}", get(serve_frontend))
+        // Serve embedded frontend (SPA fallback)
         .route("/", get(serve_index))
+        .fallback(serve_frontend)
         .with_state(state)
 }
 
@@ -86,7 +85,7 @@ async fn search(
 
     if query.is_empty() {
         // List recent with pagination
-        let offset = (page - 1) * params.limit;
+        let _offset = (page - 1) * params.limit;
         let results = state.store.list_recent(params.limit)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         let total = state.store.count().unwrap_or(0);
@@ -173,9 +172,9 @@ async fn serve_index() -> impl IntoResponse {
 }
 
 async fn serve_frontend(
-    axum::extract::Path(path): axum::extract::Path<String>,
+    req: axum::http::Request<axum::body::Body>,
 ) -> impl IntoResponse {
-    serve_asset(&path)
+    serve_asset(req.uri().path())
 }
 
 fn serve_asset(path: &str) -> Response {

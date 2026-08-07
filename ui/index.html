@@ -2,9 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ui</title>
+    <title>Pliny</title>
+    <style>
+      /* Prevent FOUC — apply theme before React mounts */
+      html[data-theme="light"] body { background: #fbfbfb; color: #1a1a1e; }
+      body { background: #08090a; color: #e6edf3; font-family: system-ui, -apple-system, sans-serif; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
