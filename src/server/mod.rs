@@ -164,7 +164,7 @@ async fn create_note(
 
     let slug = title.to_lowercase()
         .chars()
-        .filter(|c| c.is_alphanumeric() || c == ' ' || c == '-')
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '-')
         .collect::<String>()
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -172,12 +172,12 @@ async fn create_note(
 
     let id = format!("note-{}-{}", slug, chrono::Utc::now().timestamp() % 100000);
 
-    let entry = pliny::core::Entry {
-        id: pliny::core::EntryId(id.clone()),
+    let entry = crate::core::Entry {
+        id: crate::core::EntryId(id.clone()),
         source_url: String::new(),
         title,
         content: body.content,
-        source_type: pliny::core::SourceType::Note,
+        source_type: crate::core::SourceType::Note,
         tags: Vec::new(),
         created_at: chrono::Utc::now(),
     };

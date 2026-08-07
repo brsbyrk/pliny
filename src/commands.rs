@@ -82,7 +82,7 @@ pub async fn note(config: &pliny::config::Config, content: &str, title: Option<&
     let slug = title
         .to_lowercase()
         .chars()
-        .filter(|c| c.is_alphanumeric() || *c == ' ' || *c == '-')
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '-')
         .collect::<String>()
         .split_whitespace()
         .collect::<Vec<_>>()
