@@ -255,8 +255,10 @@ async fn related_entries(
     let model_dir = std::env::var("PLINY_MODEL_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
-            let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-            std::path::PathBuf::from(home).join(".pliny").join("models")
+            dirs::data_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("pliny")
+                .join("models")
         });
 
     if crate::search::Embedder::is_available(&model_dir) {

@@ -12,12 +12,10 @@ path = "src/main.rs"
 
 [dependencies]
 # ── Async runtime ──
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"] }
 
 # ── Web server ──
 axum = "0.7"
-tower = "0.5"
-tower-http = { version = "0.6", features = ["fs", "cors"] }
 
 # ── Database ──
 rusqlite = { version = "0.32", features = ["bundled", "vtab", "column_decltype"] }
@@ -37,7 +35,6 @@ url = "2"
 chrono = { version = "0.4", features = ["serde"] }
 
 # ── Error handling ──
-thiserror = "2"
 anyhow = "1"
 
 # ── Logging ──
@@ -53,14 +50,14 @@ scraper = "0.21"
 
 # ── ONNX inference (embeddings) ──
 ort = "2.0.0-rc.12"
-ndarray = "0.16"
 tokenizers = "0.21"
 
 # ── CLI ──
 clap = { version = "4", features = ["derive"] }
-async-trait = "0.1.91"
-regex = "1.13.1"
-rust-embed = "8.12.0"
+async-trait = "0.1"
+regex = "1"
+rust-embed = "8"
+dirs = "6"
 
 [profile.release]
 opt-level = 3
