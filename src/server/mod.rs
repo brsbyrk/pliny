@@ -33,6 +33,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/health", get(health))
         .route("/api/entries", get(search))
         .route("/api/entry/{id}", get(get_entry))
+        .route("/api/entry/{id}/related", get(related_entries))
         .route("/api/ingest/add-url", post(ingest))
         .route("/api/notes", post(create_note))
         .route("/api/stats", get(stats))
@@ -207,6 +208,54 @@ async fn get_entry(
         }))),
         None => Err(StatusCode::NOT_FOUND),
     }
+}
+
+async fn related_entries(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let entry = state.store.get_entry(&id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let Some(entry) = entry else { return Err(StatusCode::NOT_FOUND) };
+
+    // Use vector search if model available, else FTS5 with title
+    let model_dir = std::env::var("PLINY_MODEL_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+            std::path::PathBuf::from(home).join(".pliny").join("models")
+        });
+
+    if crate::search::Embedder::is_available(&model_dir) {
+        let embedder = crate::search::Embedder::load(&model_dir)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let text = crate::search::Embedder::embed_entry(&entry.title, &entry.content);
+        let embedding = embedder.embed(&text)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let related = state.store.search_vec(&embedding, 6)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let ids: Vec<String> = related.into_iter()
+            .filter(|(rid, _)| rid != &id)
+            .take(5)
+            .map(|(rid, _)| rid)
+            .collect();
+        return Ok(Json(serde_json::json!({"related": ids})));
+    }
+
+    // Fallback: FTS5 search on title keywords
+    let keywords: String = entry.title.split_whitespace().take(3).collect::<Vec<_>>().join(" OR ");
+    if keywords.is_empty() {
+        return Ok(Json(serde_json::json!({"related": []})));
+    }
+    let results = state.store.search_fts(&keywords, 6)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let ids: Vec<String> = results.into_iter()
+        .filter(|r| r.id != id)
+        .take(5)
+        .map(|r| r.id)
+        .collect();
+    Ok(Json(serde_json::json!({"related": ids})))
 }
 
 // ── Static file serving ────────────────────────────────────────

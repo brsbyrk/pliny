@@ -10,7 +10,7 @@ use serde::Serialize;
 use crate::store::Store;
 
 /// A search result — entry metadata + snippet.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct SearchResult {
     pub id: String,
     pub title: String,

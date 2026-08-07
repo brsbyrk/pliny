@@ -13,85 +13,121 @@ pub struct Store {
 }
 
 impl Store {
-    /// Open (or create) the database at `path`, applying all migrations.
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-
-        // Register sqlite-vec extension before opening any connection
         unsafe {
             rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
                 sqlite_vec::sqlite3_vec_init as *const (),
             )));
         }
-
         let conn = Connection::open(path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         schema::apply(&conn)?;
-        Ok(Self {
-            conn: Mutex::new(conn),
-        })
+        Ok(Self { conn: Mutex::new(conn) })
     }
 
-    /// Open an in-memory database for testing.
     pub fn open_in_memory() -> Result<Self> {
-        // Register extension (idempotent — safe to call multiple times)
         unsafe {
             rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
                 sqlite_vec::sqlite3_vec_init as *const (),
             )));
         }
-
         let conn = Connection::open_in_memory()?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         schema::apply(&conn)?;
-        Ok(Self {
-            conn: Mutex::new(conn),
-        })
+        Ok(Self { conn: Mutex::new(conn) })
     }
 
-    /// Acquire a lock on the underlying connection.
     pub fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
         self.conn.lock().expect("store lock poisoned")
     }
 
-    /// Insert a new entry. Returns `true` if inserted, `false` if already exists.
     pub fn insert(&self, entry: &crate::core::Entry) -> Result<bool> {
         let conn = self.conn();
-
-        // Dedup: check if URL already exists
         let exists: bool = conn.query_row(
             "SELECT COUNT(*) > 0 FROM entries WHERE source_url = ?1",
             rusqlite::params![entry.source_url],
             |r| r.get(0),
         )?;
-
-        if exists {
-            return Ok(false);
-        }
-
+        if exists { return Ok(false); }
         conn.execute(
             "INSERT INTO entries (id, source_url, title, content, source_type, tags, created_at, modified_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
             rusqlite::params![
-                entry.id.to_string(),
-                entry.source_url,
-                entry.title,
-                entry.content,
-                entry.source_type.as_str(),
-                serde_json::to_string(&entry.tags)?,
+                entry.id.to_string(), entry.source_url, entry.title, entry.content,
+                entry.source_type.as_str(), serde_json::to_string(&entry.tags)?,
                 entry.created_at.to_rfc3339(),
             ],
         )?;
         Ok(true)
     }
 
-    /// Return the total number of entries.
     pub fn count(&self) -> Result<usize> {
-        let conn = self.conn();
-        let count: usize = conn
-            .query_row("SELECT COUNT(*) FROM entries", [], |r| r.get(0))?;
-        Ok(count)
+        self.conn().query_row("SELECT COUNT(*) FROM entries", [], |r| r.get(0))
+            .map_err(Into::into)
     }
+
+    /// Store embedding + insert in one call.
+    pub fn insert_with_embedding(&self, entry: &crate::core::Entry, embedding: &[f32]) -> Result<bool> {
+        let inserted = self.insert(entry)?;
+        if inserted {
+            self.insert_embedding(&entry.id.to_string(), embedding)?;
+        }
+        Ok(inserted)
+    }
+
+    /// Store a 384-dim embedding blob linked to an entry rowid.
+    pub fn insert_embedding(&self, entry_id: &str, embedding: &[f32]) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(
+            "INSERT OR REPLACE INTO entries_v0(rowid, embedding)
+             VALUES ((SELECT rowid FROM entries WHERE id = ?1), ?2)",
+            rusqlite::params![entry_id, f32_to_blob(embedding)],
+        )?;
+        Ok(())
+    }
+
+    /// Vector KNN search via vec0.
+    pub fn search_vec(&self, embedding: &[f32], limit: usize) -> Result<Vec<(String, f32)>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT e.id, v.distance
+             FROM entries_v0 v
+             JOIN entries e ON e.rowid = v.rowid
+             WHERE v.embedding MATCH ?1
+             ORDER BY v.distance
+             LIMIT ?2"
+        )?;
+        let rows = stmt.query_map(rusqlite::params![f32_to_blob(embedding), limit], |row| {
+            Ok((row.get::<_, String>(0)?, 1.0 - row.get::<_, f32>(1)?))
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Hybrid RRF: fuse FTS5 + vector results.
+    pub fn search_hybrid(&self, query: &str, embedding: &[f32], limit: usize) -> Result<Vec<crate::search::SearchResult>> {
+        let fts = self.search_fts(query, limit * 2)?;
+        let vec = self.search_vec(embedding, limit * 2)?;
+        let mut scores: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
+        const K: f32 = 60.0;
+        for (i, r) in fts.iter().enumerate() { *scores.entry(r.id.clone()).or_default() += 1.0 / (K + i as f32 + 1.0); }
+        for (i, (id, _)) in vec.iter().enumerate() { *scores.entry(id.clone()).or_default() += 1.0 / (K + i as f32 + 1.0); }
+        let mut scored: Vec<_> = scores.into_iter().collect();
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(limit);
+
+        let mut results = Vec::new();
+        for (id, _) in &scored {
+            if let Some(r) = fts.iter().find(|r| &r.id == id) {
+                results.push(r.clone());
+            }
+        }
+        Ok(results)
+    }
+}
+
+fn f32_to_blob(data: &[f32]) -> Vec<u8> {
+    data.iter().flat_map(|f| f.to_le_bytes()).collect()
 }
