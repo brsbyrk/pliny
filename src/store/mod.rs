@@ -131,6 +131,62 @@ impl Store {
         }
         Ok(results)
     }
+
+    /// Knowledge base statistics.
+    pub fn stats(&self) -> Result<Stats> {
+        let conn = self.conn();
+        let total = conn.query_row("SELECT COUNT(*) FROM entries", [], |r| r.get(0))?;
+
+        let mut stmt = conn.prepare(
+            "SELECT source_type, COUNT(*) FROM entries GROUP BY source_type ORDER BY COUNT(*) DESC"
+        )?;
+        let mut by_source = std::collections::BTreeMap::new();
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, usize>(1)?)))?;
+        for r in rows { let (k, v) = r?; by_source.insert(k, v); }
+
+        let mut stmt = conn.prepare("SELECT tags FROM entries WHERE tags != '[]'")?;
+        let mut tag_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        for r in rows {
+            let tags_str = r?;
+            if let Ok(tags) = serde_json::from_str::<Vec<String>>(&tags_str) {
+                for tag in tags { *tag_counts.entry(tag).or_default() += 1; }
+            }
+        }
+        let mut top_tags: Vec<_> = tag_counts.into_iter().collect();
+        top_tags.sort_by(|a, b| b.1.cmp(&a.1));
+        top_tags.truncate(10);
+
+        let last = conn.query_row(
+            "SELECT title, source_type, created_at FROM entries ORDER BY created_at DESC LIMIT 1",
+            [],
+            |r| Ok(LastEntry { title: r.get(0)?, source_type: r.get(1)?, created_at: r.get(2)? }),
+        ).ok();
+
+        let db_size = conn.path()
+            .and_then(|p| std::fs::metadata(p).ok())
+            .map(|m| m.len() as f64 / 1_000_000.0)
+            .unwrap_or(0.0);
+
+        Ok(Stats { total, db_size_mb: db_size, by_source, top_tags, last_ingested: last })
+    }
+}
+
+/// Knowledge base statistics.
+#[derive(Debug, serde::Serialize)]
+pub struct Stats {
+    pub total: usize,
+    pub db_size_mb: f64,
+    pub by_source: std::collections::BTreeMap<String, usize>,
+    pub top_tags: Vec<(String, usize)>,
+    pub last_ingested: Option<LastEntry>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct LastEntry {
+    pub title: String,
+    pub source_type: String,
+    pub created_at: String,
 }
 
 fn f32_to_blob(data: &[f32]) -> Vec<u8> {

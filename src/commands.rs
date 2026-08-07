@@ -67,6 +67,45 @@ pub async fn rss(config: &pliny::config::Config, file: &str) -> Result<()> {
     monitor.run_loop(store).await
 }
 
+/// Show knowledge base statistics.
+pub async fn stats(config: &pliny::config::Config) -> Result<()> {
+    let db_path = config.data_dir.join("pliny.db");
+    let store = pliny::store::Store::open(&db_path)?;
+
+    let s = store.stats()?;
+
+    println!("Pliny — Knowledge Base Stats\n");
+    println!("  Total entries:  {}", s.total);
+    println!("  Database:       {} MB", s.db_size_mb);
+    println!();
+
+    if s.total == 0 {
+        println!("  No entries yet. Start with: pliny ingest <url>");
+        return Ok(());
+    }
+
+    println!("  By source:");
+    let max_label = s.by_source.keys().map(|k| k.len()).max().unwrap_or(0);
+    for (source, count) in &s.by_source {
+        let bar = "█".repeat(*count as usize);
+        println!("    {:<width$}  {:>4}  {}", source, count, bar, width = max_label);
+    }
+
+    if !s.top_tags.is_empty() {
+        println!("\n  Top tags:");
+        for (tag, count) in &s.top_tags {
+            println!("    {:<20}  {:>4}", tag, count);
+        }
+    }
+
+    if let Some(last) = &s.last_ingested {
+        println!("\n  Last ingested:  {} [{}]", last.title, last.source_type);
+        println!("                  {}", last.created_at);
+    }
+
+    Ok(())
+}
+
 /// Import bookmarks from a file (browser export, Pocket, Raindrop).
 pub async fn import_file(config: &pliny::config::Config, path: &str) -> Result<()> {
     let db_path = config.data_dir.join("pliny.db");

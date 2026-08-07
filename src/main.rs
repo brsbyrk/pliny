@@ -43,6 +43,8 @@ enum Command {
         /// Path to import file
         file: String,
     },
+    /// Show knowledge base statistics
+    Stats,
 }
 
 #[tokio::main]
@@ -80,6 +82,10 @@ async fn main() -> anyhow::Result<()> {
         Command::Import { file } => {
             let config = pliny::config::Config::from_env();
             commands::import_file(&config, &file).await?;
+        }
+        Command::Stats => {
+            let config = pliny::config::Config::from_env();
+            commands::stats(&config).await?;
         }
     }
 
