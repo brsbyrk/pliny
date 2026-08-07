@@ -1,106 +1,82 @@
-/* ── Pliny — Personal Knowledge Engine ── */
-/* Dark + Light themes, system preference aware */
+@import "tailwindcss";
 
-:root {
-  /* Dark theme (default) */
-  --bg:        #08090a;
-  --bg-panel:  #0f1011;
-  --bg-card:   #141517;
-  --bg-hover:  #1a1c1f;
-  --bg-input:  #0f1113;
+@custom-variant dark (&:where(.dark, [data-theme="dark"] *));
 
-  --border-subtle:   rgba(255,255,255,0.05);
-  --border-standard: rgba(255,255,255,0.08);
-  --border-visible:  rgba(255,255,255,0.14);
-
-  --text:        #e6edf3;
-  --text-dim:    #8b949e;
-  --text-muted:  #656d76;
-  --text-faint:  #484f58;
-
-  --accent:        #58a6ff;
-  --accent-hover:  #79c0ff;
-  --accent-muted:  rgba(88,166,255,0.12);
-
-  --green:  #3fb950;
-  --orange: #d29922;
-  --red:    #f85149;
-  --purple: #a371f7;
-
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
 }
 
-/* Light theme */
-[data-theme="light"] {
-  --bg:        #fbfbfb;
-  --bg-panel:  #f3f3f5;
-  --bg-card:   #ffffff;
-  --bg-hover:  #f5f5f7;
-  --bg-input:  #f3f3f5;
-
-  --border-subtle:   rgba(0,0,0,0.06);
-  --border-standard: rgba(0,0,0,0.10);
-  --border-visible:  rgba(0,0,0,0.16);
-
-  --text:        #1a1a1e;
-  --text-dim:    #555561;
-  --text-muted:  #7a7a85;
-  --text-faint:  #a0a0ab;
-
-  --accent:        #0066e0;
-  --accent-hover:  #0052b8;
-  --accent-muted:  rgba(0,102,224,0.08);
-
-  --green:  #1a8a3f;
-  --orange: #b86e00;
-  --red:    #c42b2b;
-  --purple: #7938c9;
+:root {
+  --background: #08090a;
+  --foreground: #e6edf3;
+  --card: #141517;
+  --card-foreground: #e6edf3;
+  --primary: #58a6ff;
+  --primary-foreground: #ffffff;
+  --muted: #1b1e22;
+  --muted-foreground: #8b949e;
+  --accent: #1b1e22;
+  --accent-foreground: #e6edf3;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: #0f1113;
+  --ring: rgba(88, 166, 255, 0.3);
 }
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+[data-theme="light"] {
+  --background: #fbfbfb;
+  --foreground: #1a1a1e;
+  --card: #ffffff;
+  --card-foreground: #1a1a1e;
+  --primary: #0066e0;
+  --primary-foreground: #ffffff;
+  --muted: #f3f3f5;
+  --muted-foreground: #555561;
+  --accent: #f3f3f5;
+  --accent-foreground: #1a1a1e;
+  --border: rgba(0, 0, 0, 0.10);
+  --input: #f3f3f5;
+  --ring: rgba(0, 102, 224, 0.3);
+}
 
-html {
-  font-size: 14px;
-  color-scheme: light dark;
+* {
+  border-color: var(--border);
 }
 
 body {
-  font-family: var(--font);
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  transition: background 0.3s ease, color 0.3s ease;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
-
-/* Layout */
-#root {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 20px 20px 80px;
-}
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-standard); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--border-visible); }
-
-/* Animations */
-@keyframes fadeIn {
+/* Animations for shadcn */
+@keyframes fade-in {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes modalIn {
+@keyframes modal-in {
   from { opacity: 0; transform: translateY(8px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+.animate-fade-in { animation: fade-in 0.2s ease; }
+.animate-modal-in { animation: modal-in 0.15s ease; }

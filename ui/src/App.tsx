@@ -1,4 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Search, Plus, Sun, Moon, X } from 'lucide-react';
 
 interface Entry {
   id: string;
@@ -16,85 +23,21 @@ interface Stats {
 
 const API = '';
 const PER_PAGE = 24;
-
 const SOURCE_TYPES = ['all', 'web', 'x', 'youtube', 'github', 'reddit'] as const;
 type SourceFilter = (typeof SOURCE_TYPES)[number];
 type Theme = 'dark' | 'light';
 
-const SRC_ICONS: Record<string, string> = {
-  x: '𝕏', youtube: '▶', github: '⬡', reddit: '⬆', web: '🌐', feed: '📡',
-};
-const SRC_LABELS: Record<string, string> = {
-  x: 'X', youtube: 'YouTube', github: 'GitHub', reddit: 'Reddit', web: 'Web', feed: 'Feed',
-};
+const SRC_LABELS: Record<string, string> = { x: 'X', youtube: 'YT', github: 'GH', reddit: 'Reddit', web: 'Web', feed: 'Feed' };
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'now';
   if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
+  const h = Math.floor(mins / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
 }
-
-function highlight(snippet: string) {
-  return snippet.split(/(<mark>.*?<\/mark>)/g).map((p, i) =>
-    p.startsWith('<mark>') ? (
-      <mark key={i} style={{
-        background: 'var(--accent-muted)', color: 'var(--accent)',
-        borderRadius: 2, padding: '0 2px',
-      }}>{p.replace(/<\/?mark>/g, '')}</mark>
-    ) : p
-  );
-}
-
-// ── Styles ──
-
-const S = {
-  input: {
-    background: 'var(--bg-input)', border: '1px solid var(--border-standard)',
-    borderRadius: 6, padding: '0 14px', height: 38, fontSize: '0.88rem',
-    fontFamily: 'var(--font)', color: 'var(--text)', outline: 'none', flex: 1,
-  } as React.CSSProperties,
-  btn: {
-    background: 'var(--accent-muted)', color: 'var(--accent)',
-    border: '1px solid rgba(88,166,255,0.15)', borderRadius: 6,
-    padding: '4px 12px', fontSize: '0.8rem', fontWeight: 500,
-    cursor: 'pointer', fontFamily: 'var(--font)',
-  } as React.CSSProperties,
-  iconBtn: {
-    background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6,
-    padding: '4px 8px', fontSize: '0.9rem', cursor: 'pointer',
-    color: 'var(--text-dim)', fontFamily: 'var(--font)',
-  } as React.CSSProperties,
-  card: {
-    background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
-    borderRadius: 8, padding: '12px 16px', cursor: 'pointer',
-    transition: 'background 0.1s, border-color 0.1s',
-    animation: 'fadeIn 0.2s ease',
-  } as React.CSSProperties,
-  skeleton: {
-    background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
-    borderRadius: 8, height: 72, opacity: 0.4,
-  } as React.CSSProperties,
-  pageBtn: (d: boolean): React.CSSProperties => ({
-    background: 'var(--bg-card)', color: d ? 'var(--text-faint)' : 'var(--text-dim)',
-    border: '1px solid var(--border-standard)', borderRadius: 6,
-    padding: '4px 10px', fontSize: '0.82rem', cursor: d ? 'default' : 'pointer',
-    fontFamily: 'var(--font)',
-  }),
-  pill: (active: boolean): React.CSSProperties => ({
-    padding: '2px 10px', borderRadius: 9999, fontSize: '0.72rem', fontWeight: 500,
-    border: '1px solid', cursor: 'pointer', fontFamily: 'var(--font)',
-    transition: 'all 0.12s',
-    background: active ? 'var(--accent-muted)' : 'transparent',
-    color: active ? 'var(--accent)' : 'var(--text-muted)',
-    borderColor: active ? 'rgba(88,166,255,0.2)' : 'var(--border-subtle)',
-  }),
-};
-
-// ── App ──
 
 export default function App() {
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -122,6 +65,8 @@ export default function App() {
     localStorage.setItem('pliny-theme', theme);
   }, [theme]);
 
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+
   const fetchEntries = useCallback(async (q = '', pg = 1) => {
     setLoading(true);
     try {
@@ -134,17 +79,12 @@ export default function App() {
   }, []);
 
   const fetchStats = useCallback(async () => {
-    try {
-      const r = await fetch(`${API}/api/stats`);
-      setStats(await r.json());
-    } catch { /* */ }
+    try { const r = await fetch(`${API}/api/stats`); setStats(await r.json()); } catch { /* */ }
   }, []);
 
   useEffect(() => { fetchEntries(); fetchStats(); }, [fetchEntries, fetchStats]);
 
   const doSearch = (e: React.FormEvent) => { e.preventDefault(); setPage(1); fetchEntries(query, 1); };
-
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
   const doCapture = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,9 +103,7 @@ export default function App() {
       } else if (d.status === 'duplicate') {
         setCaptureUrl(''); setCaptureOpen(false);
         showToast('Already saved');
-      } else {
-        showToast('No content found');
-      }
+      } else { showToast('No content found'); }
     } catch { showToast('Error'); }
     finally { setCapturing(false); }
   };
@@ -174,21 +112,16 @@ export default function App() {
     setDetail(entry); setDetailContent(null);
     try {
       const r = await fetch(`${API}/api/entry/${entry.id}`);
-      if (r.ok) {
-        const d = await r.json();
-        setDetailContent(d.content || entry.snippet);
-      } else { setDetailContent(entry.snippet); }
+      if (r.ok) { const d = await r.json(); setDetailContent(d.content || entry.snippet); }
+      else { setDetailContent(entry.snippet); }
     } catch { setDetailContent(entry.snippet); }
   };
 
-  const closeDetail = () => { setDetail(null); setDetailContent(null); };
-
   const filtered = sourceFilter === 'all' ? entries : entries.filter(e => e.source_type === sourceFilter);
 
-  // Keyboard: esc, ⌘K, /
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { closeDetail(); setCaptureOpen(false); }
+      if (e.key === 'Escape') { setDetail(null); setCaptureOpen(false); }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); searchRef.current?.focus(); }
       if (e.key === '/' && document.activeElement !== searchRef.current) { e.preventDefault(); searchRef.current?.focus(); }
     };
@@ -197,122 +130,130 @@ export default function App() {
   }, []);
 
   return (
-    <div>
+    <div className="max-w-3xl mx-auto px-5 py-5 pb-20">
       {/* Header */}
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, marginBottom: 16, borderBottom: '1px solid var(--border-subtle)' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-          <h1 style={{ fontFamily: 'var(--font-mono)', fontSize: '1.2rem', fontWeight: 650, color: 'var(--accent)', letterSpacing: '-0.4px' }}>Pliny</h1>
-          {stats && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{stats.total_entries} entries</span>}
+      <header className="flex items-center justify-between pb-3 mb-4 border-b">
+        <div className="flex items-baseline gap-3">
+          <h1 className="font-mono text-lg font-semibold tracking-tight text-primary">Pliny</h1>
+          {stats && <span className="text-xs text-muted-foreground tabular-nums">{stats.total_entries} entries</span>}
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={() => setCaptureOpen(!captureOpen)} style={S.btn}>{captureOpen ? '✕' : '+ Capture'}</button>
-          <button onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme" style={S.iconBtn}>{theme === 'dark' ? '☀' : '☾'}</button>
+        <div className="flex gap-2">
+          <Button variant="default" size="sm" onClick={() => setCaptureOpen(!captureOpen)}>
+            {captureOpen ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+            {captureOpen ? '' : 'Capture'}
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
         </div>
       </header>
 
       {/* Capture form */}
       {captureOpen && (
-        <form onSubmit={doCapture} style={{ display: 'flex', gap: 8, marginBottom: 16, animation: 'fadeIn 0.2s ease' }}>
-          <input type="url" value={captureUrl} onChange={e => setCaptureUrl(e.target.value)} placeholder="Paste a URL..." autoFocus style={S.input} />
-          <button type="submit" disabled={capturing || !captureUrl.trim()} style={{ ...S.btn, background: captureUrl.trim() ? 'var(--accent)' : 'var(--bg-input)', color: captureUrl.trim() ? '#fff' : 'var(--text-muted)' }}>{capturing ? '...' : 'Save'}</button>
+        <form onSubmit={doCapture} className="flex gap-2 mb-4 animate-fade-in">
+          <Input type="url" value={captureUrl} onChange={e => setCaptureUrl(e.target.value)} placeholder="Paste a URL..." autoFocus />
+          <Button type="submit" disabled={capturing || !captureUrl.trim()} size="sm">
+            {capturing ? '...' : 'Save'}
+          </Button>
         </form>
       )}
 
       {/* Search */}
-      <form onSubmit={doSearch} style={{ marginBottom: 12 }}>
-        <input ref={searchRef} type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search... (/ to focus)" style={{ ...S.input, width: '100%' }} />
+      <form onSubmit={doSearch} className="mb-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input ref={searchRef} type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search... (/ to focus)" className="pl-9" />
+        </div>
       </form>
 
       {/* Source filters */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20, flexWrap: 'wrap' }}>
+      <div className="flex gap-1.5 mb-5 flex-wrap">
         {SOURCE_TYPES.map(t => (
-          <button key={t} onClick={() => { setSourceFilter(t); setPage(1); }} style={S.pill(sourceFilter === t)}>
+          <Badge key={t} variant={sourceFilter === t ? 'default' : 'outline'}
+            className="cursor-pointer"
+            onClick={() => { setSourceFilter(t); setPage(1); }}>
             {t === 'all' ? 'All' : SRC_LABELS[t] || t}
-          </button>
+          </Badge>
         ))}
       </div>
 
       {/* Content */}
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {Array.from({length: 5}).map((_, i) => <div key={i} style={S.skeleton} />)}
+        <div className="flex flex-col gap-2">
+          {Array.from({length: 5}).map((_, i) => <Skeleton key={i} className="h-[72px] w-full" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-muted)' }}>
-          <div style={{ fontSize: '1.5rem', marginBottom: 8, opacity: 0.3 }}>{query || sourceFilter !== 'all' ? '🔍' : '📚'}</div>
-          <p style={{ fontSize: '0.88rem', fontWeight: 500, color: 'var(--text-dim)', marginBottom: 4 }}>
+        <div className="text-center py-16 text-muted-foreground">
+          <p className="text-sm font-medium mb-1">
             {query ? 'Nothing found' : sourceFilter !== 'all' ? `No ${SRC_LABELS[sourceFilter] || sourceFilter} entries` : 'No entries yet'}
           </p>
-          <p style={{ fontSize: '0.78rem' }}>{query ? 'Try a different search.' : sourceFilter !== 'all' ? 'Try a different filter.' : 'Capture your first URL.'}</p>
+          <p className="text-xs">{query ? 'Try a different search.' : 'Capture your first URL to start.'}</p>
         </div>
       ) : (
         <>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="flex flex-col gap-2">
             {filtered.map(entry => (
-              <article key={entry.id}
-                onClick={() => openDetail(entry)}
-                style={S.card}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.borderColor = 'var(--border-standard)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.borderColor = 'var(--border-subtle)'; }}>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <span style={{ width: 22, height: 22, borderRadius: 4, background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', flexShrink: 0, border: '1px solid var(--border-subtle)', marginTop: 1 }}>
-                    {SRC_ICONS[entry.source_type] || '•'}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 550, lineHeight: 1.35, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.title}</div>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', lineHeight: 1.45, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', marginBottom: (entry.tags?.length ? 6 : 0) }}>
-                      {highlight(entry.snippet)}
-                    </div>
+              <Card key={entry.id} className="cursor-pointer hover:bg-accent/40 transition-colors animate-fade-in"
+                onClick={() => openDetail(entry)}>
+                <CardContent className="p-3 flex gap-3 items-start">
+                  <Badge variant="outline" className="h-5 w-5 p-0 flex items-center justify-center shrink-0 mt-0.5 text-[10px]">
+                    {(entry.source_type || 'web').substring(0,1).toUpperCase()}
+                  </Badge>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium leading-snug truncate mb-1">{entry.title}</div>
+                    <div className="text-xs text-muted-foreground leading-relaxed line-clamp-2"
+                      dangerouslySetInnerHTML={{ __html: entry.snippet }} />
                     {entry.tags && entry.tags.length > 0 && (
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {entry.tags.map(t => (
-                          <span key={t} style={{ fontSize: '0.65rem', padding: '1px 7px', borderRadius: 9999, background: 'var(--accent-muted)', color: 'var(--accent)', border: '1px solid rgba(88,166,255,0.1)' }}>{t}</span>
-                        ))}
+                      <div className="flex gap-1 mt-1.5 flex-wrap">
+                        {entry.tags.map(t => <Badge key={t} variant="secondary" className="text-[10px] px-1.5 py-0">{t}</Badge>)}
                       </div>
                     )}
                   </div>
-                  <span style={{ fontSize: '0.68rem', color: 'var(--text-faint)', whiteSpace: 'nowrap', marginTop: 2 }}>{timeAgo(entry.created_at)}</span>
-                </div>
-              </article>
+                  <span className="text-[10px] text-muted-foreground/60 whitespace-nowrap mt-1">{timeAgo(entry.created_at)}</span>
+                </CardContent>
+              </Card>
             ))}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 20, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
-            <button onClick={() => { const p = Math.max(1, page - 1); setPage(p); fetchEntries(query, p); }} disabled={page <= 1} style={S.pageBtn(page <= 1)}>←</button>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: '0 6px', fontVariantNumeric: 'tabular-nums' }}>{page}</span>
-            <button onClick={() => { const p = page + 1; setPage(p); fetchEntries(query, p); }} disabled={entries.length < PER_PAGE} style={S.pageBtn(entries.length < PER_PAGE)}>→</button>
+          <div className="flex justify-center gap-2 mt-5 pt-4 border-t">
+            <Button variant="outline" size="sm" onClick={() => { const p = Math.max(1, page - 1); setPage(p); fetchEntries(query, p); }} disabled={page <= 1}>Prev</Button>
+            <span className="text-xs text-muted-foreground flex items-center tabular-nums">Page {page}</span>
+            <Button variant="outline" size="sm" onClick={() => { const p = page + 1; setPage(p); fetchEntries(query, p); }} disabled={entries.length < PER_PAGE}>Next</Button>
           </div>
         </>
       )}
 
-      {/* Detail modal */}
-      {detail && (
-        <div onClick={closeDetail} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div onClick={e => e.stopPropagation()} style={{ width: 640, maxWidth: '100%', maxHeight: '85vh', background: 'var(--bg-card)', border: '1px solid var(--border-standard)', borderRadius: 12, overflow: 'auto', padding: '20px 24px', animation: 'modalIn 0.15s ease' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div>
-                <h2 style={{ fontSize: '1rem', fontWeight: 600, lineHeight: 1.3 }}>{detail.title}</h2>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>{SRC_LABELS[detail.source_type] || detail.source_type} · {timeAgo(detail.created_at)}</div>
+      {/* Detail dialog */}
+      <Dialog open={!!detail} onOpenChange={() => { setDetail(null); setDetailContent(null); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          {detail && (
+            <DialogHeader>
+              <DialogTitle>{detail.title}</DialogTitle>
+            </DialogHeader>
+          )}
+          {detail && (
+            <div className="space-y-3">
+              <div className="flex gap-2 items-center text-xs text-muted-foreground">
+                <Badge variant="outline" className="text-[10px]">{SRC_LABELS[detail.source_type] || detail.source_type}</Badge>
+                <span>{timeAgo(detail.created_at)}</span>
+                <a href={detail.source_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline ml-auto">
+                  Open original →
+                </a>
               </div>
-              <button onClick={closeDetail} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: '1.3rem', cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}>×</button>
+              <div className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
+                {detailContent !== null
+                  ? detailContent.length > 0 ? detailContent : detail.snippet.replace(/<\/?mark>/g, '')
+                  : <span className="opacity-40">Loading...</span>}
+              </div>
             </div>
-            <a href={detail.source_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginBottom: 14, fontSize: '0.78rem', color: 'var(--accent)' }}>Open original →</a>
-            <div style={{ fontSize: '0.84rem', lineHeight: 1.6, color: 'var(--text-dim)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-              {detailContent !== null
-                ? detailContent.length > 0 ? detailContent : detail.snippet.replace(/<\/?mark>/g, '')
-                : <span style={{ opacity: 0.4 }}>Loading...</span>}
-            </div>
-          </div>
-        </div>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Toast */}
       {toast && (
-        <div style={{
-          position: 'fixed', bottom: 32, left: '50%', transform: 'translateX(-50%)',
-          background: 'var(--bg-card)', border: '1px solid var(--border-standard)',
-          borderRadius: 8, padding: '8px 20px', fontSize: '0.82rem',
-          color: 'var(--text)', zIndex: 200,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.3)', animation: 'fadeIn 0.2s ease',
-        }}>{toast}</div>
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] bg-card border rounded-lg px-5 py-2 text-sm shadow-lg animate-fade-in">
+          {toast}
+        </div>
       )}
     </div>
   );
