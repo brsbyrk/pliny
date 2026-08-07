@@ -192,4 +192,36 @@ mod tests {
         let store = Store::open_in_memory().unwrap();
         assert!(store.get_entry("nonexistent").unwrap().is_none());
     }
+
+    #[test]
+    fn stats_counts_sources() {
+        use crate::core::{Entry, EntryId, SourceType};
+
+        let store = Store::open_in_memory().unwrap();
+        store.insert(&Entry {
+            id: EntryId("a".into()), source_url: "x.com".into(), title: "A".into(),
+            content: "a".into(), source_type: SourceType::X, tags: vec!["ai".into(), "rust".into()],
+            created_at: chrono::Utc::now(),
+        }).unwrap();
+        store.insert(&Entry {
+            id: EntryId("b".into()), source_url: "y.com".into(), title: "B".into(),
+            content: "b".into(), source_type: SourceType::Web, tags: vec![],
+            created_at: chrono::Utc::now(),
+        }).unwrap();
+
+        let stats = store.stats().unwrap();
+        assert_eq!(stats.total, 2);
+        assert_eq!(stats.by_source.get("x").unwrap(), &1);
+        assert_eq!(stats.by_source.get("web").unwrap(), &1);
+        assert_eq!(stats.top_tags[0], ("ai".to_string(), 1));
+    }
+
+    #[test]
+    fn stats_empty_returns_zero() {
+        let store = Store::open_in_memory().unwrap();
+        let stats = store.stats().unwrap();
+        assert_eq!(stats.total, 0);
+        assert!(stats.by_source.is_empty());
+        assert!(stats.top_tags.is_empty());
+    }
 }
