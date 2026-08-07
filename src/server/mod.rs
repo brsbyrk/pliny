@@ -33,6 +33,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         // API
         .route("/api/health", get(health))
         .route("/api/entries", get(search))
+        .route("/api/entry/{id}", get(get_entry))
         .route("/api/ingest/add-url", post(ingest))
         .route("/api/stats", get(stats))
         // Serve embedded frontend
@@ -142,6 +143,27 @@ async fn stats(
     let count = state.store.count()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(serde_json::json!({"total_entries": count})))
+}
+
+async fn get_entry(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let entry = state.store.get_entry(&id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    match entry {
+        Some(e) => Ok(Json(serde_json::json!({
+            "id": e.id.to_string(),
+            "title": e.title,
+            "source_url": e.source_url,
+            "source_type": e.source_type.as_str(),
+            "content": e.content,
+            "tags": e.tags,
+            "created_at": e.created_at.to_rfc3339(),
+        }))),
+        None => Err(StatusCode::NOT_FOUND),
+    }
 }
 
 // ── Static file serving ────────────────────────────────────────
