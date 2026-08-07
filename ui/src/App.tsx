@@ -50,6 +50,7 @@ export default function App() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [captureUrl, setCaptureUrl] = useState('');
   const [capturing, setCapturing] = useState(false);
+  const [month, setMonth] = useState<string | null>(null); // "YYYY-MM" or null=all
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
@@ -83,6 +84,11 @@ export default function App() {
     setLoading(true);
     try {
       const p = new URLSearchParams({ q, limit: String(PER_PAGE), page: String(pg) });
+      if (month) {
+        p.set('from', `${month}-01`);
+        const [y, m] = month.split('-').map(Number);
+        p.set('to', `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`);
+      }
       const r = await fetch(`${API}/api/entries?${p}`);
       const d = await r.json();
       setEntries(d.entries || []);
@@ -94,7 +100,16 @@ export default function App() {
     try { const r = await fetch(`${API}/api/stats`); setStats(await r.json()); } catch { /* */ }
   }, []);
 
-  useEffect(() => { fetchEntries(); fetchStats(); }, [fetchEntries, fetchStats]);
+  useEffect(() => { fetchEntries(); fetchStats(); }, [fetchEntries, fetchStats, month]);
+
+  const fmtMonth = (ym: string) => new Date(+ym.split('-')[0], +ym.split('-')[1] - 1)
+    .toLocaleString('default', { month: 'long', year: 'numeric' });
+  const shiftMonth = (dir: number) => {
+    if (!month) return;
+    const [y, m] = month.split('-').map(Number);
+    const d = new Date(y, m - 1 + dir, 1);
+    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  };
 
   // Debounced live search
   const onQueryChange = (value: string) => {
@@ -305,6 +320,29 @@ export default function App() {
             {t === 'all' ? 'All' : SRC_LABELS[t] || t}
           </Badge>
         ))}
+      </div>
+
+      {/* Month browser */}
+      <div className="flex items-center justify-center gap-2 mb-5">
+        {month ? (
+          <>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => shiftMonth(-1)}>←</Button>
+            <span className="text-xs font-medium text-muted-foreground tabular-nums min-w-[130px] text-center">
+              {fmtMonth(month)}
+            </span>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => shiftMonth(1)}>→</Button>
+            <Button variant="ghost" size="sm" className="text-[10px] text-muted-foreground ml-2"
+              onClick={() => setMonth(null)}>All time</Button>
+          </>
+        ) : (
+          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground"
+            onClick={() => {
+              const now = new Date();
+              setMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+            }}>
+            Browse by month →
+          </Button>
+        )}
       </div>
 
       {/* Content */}

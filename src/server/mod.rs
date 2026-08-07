@@ -88,6 +88,10 @@ struct SearchQuery {
     limit: usize,
     #[serde(default)]
     page: usize,
+    #[serde(default)]
+    from: Option<String>,
+    #[serde(default)]
+    to: Option<String>,
 }
 
 fn default_limit() -> usize { 24 }
@@ -100,10 +104,14 @@ async fn search(
     let page = params.page.max(1);
 
     if query.is_empty() {
-        // List recent with pagination
-        let _offset = (page - 1) * params.limit;
-        let results = state.store.list_recent(params.limit)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        // Use date filter if provided, else recent
+        let results = if params.from.is_some() || params.to.is_some() {
+            state.store.list_by_date(params.from.as_deref(), params.to.as_deref(), params.limit)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        } else {
+            state.store.list_recent(params.limit)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        };
         let total = state.store.count().unwrap_or(0);
         return Ok(Json(serde_json::json!({
             "entries": results,

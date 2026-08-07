@@ -88,6 +88,31 @@ impl Store {
         Ok(results)
     }
 
+    /// List entries within a date range.
+    pub fn list_by_date(&self, from: Option<&str>, to: Option<&str>, limit: usize) -> Result<Vec<SearchResult>> {
+        let conn = self.conn();
+        let from = from.unwrap_or("1970-01-01");
+        let to = to.unwrap_or("2099-12-31");
+        let mut stmt = conn.prepare(
+            "SELECT id, title, source_url, source_type, created_at, tags,
+                    substr(content, 1, 200) AS snippet
+             FROM entries
+             WHERE created_at >= ?1 AND created_at <= ?2
+             ORDER BY created_at DESC
+             LIMIT ?3"
+        )?;
+        let rows = stmt.query_map(rusqlite::params![from, to, limit], |row| {
+            let tags_str: String = row.get(5).unwrap_or_default();
+            let tags: Vec<String> = serde_json::from_str(&tags_str).unwrap_or_default();
+            Ok(SearchResult {
+                id: row.get(0)?, title: row.get(1)?, source_url: row.get(2)?,
+                source_type: row.get(3)?, created_at: row.get(4)?,
+                snippet: row.get(6)?, tags,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
     /// Get a single entry by ID.
     pub fn get_entry(&self, id: &str) -> Result<Option<crate::core::Entry>> {
         let conn = self.conn();
@@ -213,7 +238,8 @@ mod tests {
         assert_eq!(stats.total, 2);
         assert_eq!(stats.by_source.get("x").unwrap(), &1);
         assert_eq!(stats.by_source.get("web").unwrap(), &1);
-        assert_eq!(stats.top_tags[0], ("ai".to_string(), 1));
+        assert_eq!(stats.top_tags.len(), 2);
+        assert!(stats.top_tags.contains(&("ai".to_string(), 1)));
     }
 
     #[test]
