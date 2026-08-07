@@ -21,10 +21,10 @@ pub async fn ingest(config: &pliny::config::Config, url: &str) -> Result<()> {
     let db_path = config.data_dir.join("pliny.db");
     let store = pliny::store::Store::open(&db_path)?;
 
-    store.insert(&entry)?;
-
+    let inserted = store.insert(&entry)?;
     tracing::info!(
-        "Ingested: {} [{}] ({} chars)",
+        "{}: {} [{}] ({} chars)",
+        if inserted { "Ingested" } else { "Already saved" },
         entry.id,
         entry.source_type.as_str(),
         entry.content.len()

@@ -56,11 +56,23 @@ impl Store {
         self.conn.lock().expect("store lock poisoned")
     }
 
-    /// Insert a new entry into the database.
-    pub fn insert(&self, entry: &crate::core::Entry) -> Result<()> {
+    /// Insert a new entry. Returns `true` if inserted, `false` if already exists.
+    pub fn insert(&self, entry: &crate::core::Entry) -> Result<bool> {
         let conn = self.conn();
+
+        // Dedup: check if URL already exists
+        let exists: bool = conn.query_row(
+            "SELECT COUNT(*) > 0 FROM entries WHERE source_url = ?1",
+            rusqlite::params![entry.source_url],
+            |r| r.get(0),
+        )?;
+
+        if exists {
+            return Ok(false);
+        }
+
         conn.execute(
-            "INSERT OR REPLACE INTO entries (id, source_url, title, content, source_type, tags, created_at, modified_at)
+            "INSERT INTO entries (id, source_url, title, content, source_type, tags, created_at, modified_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
             rusqlite::params![
                 entry.id.to_string(),
@@ -72,7 +84,7 @@ impl Store {
                 entry.created_at.to_rfc3339(),
             ],
         )?;
-        Ok(())
+        Ok(true)
     }
 
     /// Return the total number of entries.

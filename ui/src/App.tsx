@@ -7,6 +7,7 @@ interface Entry {
   source_type: string;
   created_at: string;
   snippet: string;
+  tags?: string[];
 }
 
 interface Stats {
@@ -107,6 +108,7 @@ export default function App() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [captureUrl, setCaptureUrl] = useState('');
   const [capturing, setCapturing] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === 'undefined') return 'dark';
     const s = localStorage.getItem('pliny-theme');
@@ -142,6 +144,8 @@ export default function App() {
 
   const doSearch = (e: React.FormEvent) => { e.preventDefault(); setPage(1); fetchEntries(query, 1); };
 
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+
   const doCapture = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!captureUrl.trim()) return;
@@ -155,8 +159,14 @@ export default function App() {
       if (d.status === 'ingested') {
         setCaptureUrl(''); setCaptureOpen(false);
         fetchEntries(query, page); fetchStats();
+        showToast('✓ Saved');
+      } else if (d.status === 'duplicate') {
+        setCaptureUrl(''); setCaptureOpen(false);
+        showToast('Already saved');
+      } else {
+        showToast('No content found');
       }
-    } catch { /* */ }
+    } catch { showToast('Error'); }
     finally { setCapturing(false); }
   };
 
@@ -250,7 +260,16 @@ export default function App() {
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '0.85rem', fontWeight: 550, lineHeight: 1.35, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.title}</div>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', lineHeight: 1.45, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{highlight(entry.snippet)}</div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', lineHeight: 1.45, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', marginBottom: (entry.tags?.length ? 6 : 0) }}>
+                      {highlight(entry.snippet)}
+                    </div>
+                    {entry.tags && entry.tags.length > 0 && (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {entry.tags.map(t => (
+                          <span key={t} style={{ fontSize: '0.65rem', padding: '1px 7px', borderRadius: 9999, background: 'var(--accent-muted)', color: 'var(--accent)', border: '1px solid rgba(88,166,255,0.1)' }}>{t}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <span style={{ fontSize: '0.68rem', color: 'var(--text-faint)', whiteSpace: 'nowrap', marginTop: 2 }}>{timeAgo(entry.created_at)}</span>
                 </div>
@@ -284,6 +303,16 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 32, left: '50%', transform: 'translateX(-50%)',
+          background: 'var(--bg-card)', border: '1px solid var(--border-standard)',
+          borderRadius: 8, padding: '8px 20px', fontSize: '0.82rem',
+          color: 'var(--text)', zIndex: 200,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.3)', animation: 'fadeIn 0.2s ease',
+        }}>{toast}</div>
       )}
     </div>
   );

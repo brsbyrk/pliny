@@ -124,10 +124,10 @@ async fn ingest(
     match entry {
         Some(entry) => {
             let id = entry.id.to_string();
-            state.store.insert(&entry)
+            let inserted = state.store.insert(&entry)
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             Ok(Json(serde_json::json!({
-                "status": "ingested",
+                "status": if inserted { "ingested" } else { "duplicate" },
                 "entry_id": id,
             })))
         }
