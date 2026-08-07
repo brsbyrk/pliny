@@ -238,7 +238,7 @@ async fn get_entry(
             "tags": e.tags,
             "created_at": e.created_at.to_rfc3339(),
         }))),
-        None => Err(StatusCode::NOT_FOUND),
+        None => Ok(Json(serde_json::json!({"error": "not_found"}))),
     }
 }
 
@@ -249,7 +249,9 @@ async fn related_entries(
     let entry = state.store.get_entry(&id)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let Some(entry) = entry else { return Err(StatusCode::NOT_FOUND) };
+    let Some(entry) = entry else {
+        return Ok(Json(serde_json::json!({"related": []})));
+    };
 
     // Use vector search if model available, else FTS5 with title
     let model_dir = std::env::var("PLINY_MODEL_DIR")

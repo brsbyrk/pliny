@@ -46,11 +46,16 @@ impl Store {
 
     pub fn insert(&self, entry: &crate::core::Entry) -> Result<bool> {
         let conn = self.conn();
-        let exists: bool = conn.query_row(
-            "SELECT COUNT(*) > 0 FROM entries WHERE source_url = ?1",
-            rusqlite::params![entry.source_url],
-            |r| r.get(0),
-        )?;
+        let exists: bool = if entry.source_url.is_empty() {
+            // Notes have no source_url — dedup by content hash instead
+            false // Always allow notes (content variation ensures uniqueness)
+        } else {
+            conn.query_row(
+                "SELECT COUNT(*) > 0 FROM entries WHERE source_url = ?1",
+                rusqlite::params![entry.source_url],
+                |r| r.get(0),
+            )?
+        };
         if exists { return Ok(false); }
         conn.execute(
             "INSERT INTO entries (id, source_url, title, content, source_type, tags, created_at, modified_at)
