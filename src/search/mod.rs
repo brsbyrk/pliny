@@ -19,6 +19,7 @@ pub struct SearchResult {
     pub created_at: String,
     pub snippet: String,
     pub tags: Vec<String>,
+    pub starred: bool,
 }
 
 impl Store {
@@ -26,7 +27,7 @@ impl Store {
     pub fn search_fts(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT e.id, e.title, e.source_url, e.source_type, e.created_at, e.tags,
+            "SELECT e.id, e.title, e.source_url, e.source_type, e.created_at, e.starred, e.tags,
                     snippet(entries_fts, 0, '<mark>', '</mark>', '…', 40) AS snippet
              FROM entries_fts
              JOIN entries e ON e.rowid = entries_fts.rowid
@@ -36,7 +37,7 @@ impl Store {
         )?;
 
         let rows = stmt.query_map(params![query, limit], |row| {
-            let tags_str: String = row.get(5).unwrap_or_default();
+            let tags_str: String = row.get(6).unwrap_or_default();
             let tags: Vec<String> = serde_json::from_str(&tags_str).unwrap_or_default();
             Ok(SearchResult {
                 id: row.get(0)?,
@@ -44,7 +45,8 @@ impl Store {
                 source_url: row.get(2)?,
                 source_type: row.get(3)?,
                 created_at: row.get(4)?,
-                snippet: row.get(6)?,
+                starred: row.get::<_, i32>(5)? != 0,
+                snippet: row.get(7)?,
                 tags,
             })
         })?;
@@ -60,7 +62,7 @@ impl Store {
     pub fn list_recent(&self, limit: usize) -> Result<Vec<SearchResult>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT id, title, source_url, source_type, created_at, coalesce(tags, '[]') as tags,
+            "SELECT id, title, source_url, source_type, created_at, starred, coalesce(tags, '[]') as tags,
                     substr(content, 1, 200) AS snippet
              FROM entries
              ORDER BY created_at DESC
@@ -68,7 +70,7 @@ impl Store {
         )?;
 
         let rows = stmt.query_map(params![limit], |row| {
-            let tags_str: String = row.get(5).unwrap_or_default();
+            let tags_str: String = row.get(6).unwrap_or_default();
             let tags: Vec<String> = serde_json::from_str(&tags_str).unwrap_or_default();
             Ok(SearchResult {
                 id: row.get(0)?,
@@ -76,7 +78,8 @@ impl Store {
                 source_url: row.get(2)?,
                 source_type: row.get(3)?,
                 created_at: row.get(4)?,
-                snippet: row.get(6)?,
+                starred: row.get::<_, i32>(5)? != 0,
+                snippet: row.get(7)?,
                 tags,
             })
         })?;
@@ -94,7 +97,7 @@ impl Store {
         let from = from.unwrap_or("1970-01-01");
         let to = to.unwrap_or("2099-12-31");
         let mut stmt = conn.prepare(
-            "SELECT id, title, source_url, source_type, created_at, tags,
+            "SELECT id, title, source_url, source_type, created_at, starred, tags,
                     substr(content, 1, 200) AS snippet
              FROM entries
              WHERE created_at >= ?1 AND created_at <= ?2
@@ -102,12 +105,13 @@ impl Store {
              LIMIT ?3"
         )?;
         let rows = stmt.query_map(rusqlite::params![from, to, limit], |row| {
-            let tags_str: String = row.get(5).unwrap_or_default();
+            let tags_str: String = row.get(6).unwrap_or_default();
             let tags: Vec<String> = serde_json::from_str(&tags_str).unwrap_or_default();
             Ok(SearchResult {
                 id: row.get(0)?, title: row.get(1)?, source_url: row.get(2)?,
                 source_type: row.get(3)?, created_at: row.get(4)?,
-                snippet: row.get(6)?, tags,
+                starred: row.get::<_, i32>(5)? != 0,
+                snippet: row.get(7)?, tags,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)

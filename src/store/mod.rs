@@ -74,7 +74,20 @@ impl Store {
             .map_err(Into::into)
     }
 
-    /// Store embedding + insert in one call.
+    /// Toggle starred status. Returns new state (true = starred).
+    pub fn toggle_star(&self, id: &str) -> Result<bool> {
+        let conn = self.conn();
+        conn.execute(
+            "UPDATE entries SET starred = CASE WHEN starred = 1 THEN 0 ELSE 1 END
+             WHERE id = ?1",
+            rusqlite::params![id],
+        )?;
+        conn.query_row("SELECT starred FROM entries WHERE id = ?1", rusqlite::params![id], |r| r.get(0))
+            .map(|s: i32| s == 1)
+            .map_err(Into::into)
+    }
+
+    /// Store an embedding vector for an entry (384 f32 values as blob).
     pub fn insert_with_embedding(&self, entry: &crate::core::Entry, embedding: &[f32]) -> Result<bool> {
         let inserted = self.insert(entry)?;
         if inserted {

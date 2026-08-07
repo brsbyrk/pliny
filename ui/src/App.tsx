@@ -15,13 +15,14 @@ interface Entry {
   created_at: string;
   snippet: string;
   tags?: string[];
+  starred: boolean;
 }
 
 interface Stats { total_entries: number; }
 
 const API = '';
 const PER_PAGE = 24;
-const SOURCE_TYPES = ['all', 'web', 'x', 'youtube', 'github', 'reddit', 'note'] as const;
+const SOURCE_TYPES = ['all', 'web', 'x', 'youtube', 'github', 'reddit', 'note', 'starred'] as const;
 type SourceFilter = (typeof SOURCE_TYPES)[number];
 type Theme = 'dark' | 'light';
 
@@ -128,6 +129,18 @@ export default function App() {
     fetchEntries(query, 1);
   };
 
+  const doToggleStar = async (id: string) => {
+    try {
+      const r = await fetch(`${API}/api/entry/${id}/star`, { method: 'POST' });
+      if (r.ok) {
+        const d = await r.json();
+        setEntries(prev => prev.map(e => e.id === id ? { ...e, starred: d.starred } : e));
+        if (detail?.id === id) setDetail(prev => prev ? { ...prev, starred: d.starred } : null);
+      }
+    } catch { /* */ }
+  };
+
+
   const doCapture = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!captureUrl.trim()) return;
@@ -196,7 +209,7 @@ export default function App() {
               const rr = await fetch(`${API}/api/entry/${rid}`);
               if (rr.ok) {
                 const rd = await rr.json();
-                relatedEntries.push({ id: rid, title: rd.title || rid, source_url: rd.source_url || '', source_type: rd.source_type || 'web', created_at: rd.created_at || '', snippet: '' });
+                relatedEntries.push({ id: rid, title: rd.title || rid, source_url: rd.source_url || '', source_type: rd.source_type || 'web', created_at: rd.created_at || '', snippet: '', starred: false });
               }
             } catch { /* skip */ }
           }
@@ -389,6 +402,14 @@ export default function App() {
                     <div className="text-sm font-medium leading-snug truncate mb-1">
                       {entry.title}
                     </div>
+
+                  <button
+                    onClick={(e) => { e.stopPropagation(); doToggleStar(entry.id); }}
+                    className={`shrink-0 mt-0.5 text-sm hover:scale-110 transition-transform ${entry.starred ? 'text-yellow-400' : 'text-muted-foreground/30'}`}
+                    title={entry.starred ? 'Unstar' : 'Star'}
+                  >
+                    ★
+                  </button>
                     <div
                       className="text-xs text-muted-foreground leading-relaxed line-clamp-2"
                       dangerouslySetInnerHTML={{ __html: entry.snippet }}

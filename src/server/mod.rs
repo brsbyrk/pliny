@@ -34,6 +34,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/health", get(health))
         .route("/api/entries", get(search))
         .route("/api/entry/{id}", get(get_entry))
+        .route("/api/entry/{id}/star", post(toggle_star))
         .route("/api/entry/{id}/related", get(related_entries))
         .route("/api/ingest/add-url", post(ingest))
         .route("/api/notes", post(create_note))
@@ -92,6 +93,8 @@ struct SearchQuery {
     from: Option<String>,
     #[serde(default)]
     to: Option<String>,
+    #[serde(default)]
+    starred: Option<bool>,
 }
 
 fn default_limit() -> usize { 24 }
@@ -113,8 +116,11 @@ async fn search(
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         };
         let total = state.store.count().unwrap_or(0);
+        let entries: Vec<_> = results.into_iter()
+            .filter(|e| !params.starred.unwrap_or(false) || e.starred)
+            .collect();
         return Ok(Json(serde_json::json!({
-            "entries": results,
+            "entries": entries,
             "total": total,
             "page": page,
         })));
@@ -248,6 +254,15 @@ async fn get_entry(
         }))),
         None => Ok(Json(serde_json::json!({"error": "not_found"}))),
     }
+}
+
+async fn toggle_star(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let starred = state.store.toggle_star(&id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(serde_json::json!({"starred": starred})))
 }
 
 async fn related_entries(
