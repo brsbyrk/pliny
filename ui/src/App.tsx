@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface Entry {
   id: string;
@@ -7,8 +7,6 @@ interface Entry {
   source_type: string;
   created_at: string;
   snippet: string;
-  content?: string;
-  tags?: string[];
 }
 
 interface Stats {
@@ -18,82 +16,96 @@ interface Stats {
 const API = '';
 const PER_PAGE = 24;
 
+const SOURCE_TYPES = ['all', 'web', 'x', 'youtube', 'github', 'reddit'] as const;
+type SourceFilter = (typeof SOURCE_TYPES)[number];
+
 function sourceIcon(type: string): string {
-  switch (type) {
-    case 'x': return '𝕏';
-    case 'youtube': return '▶';
-    case 'github': return '⬡';
-    case 'reddit': return '⬆';
-    case 'web': return '🌐';
-    case 'feed': return '📡';
-    default: return '•';
-  }
+  const icons: Record<string, string> = {
+    x: '𝕏', youtube: '▶', github: '⬡', reddit: '⬆', web: '🌐', feed: '📡',
+  };
+  return icons[type] || '•';
+}
+
+function sourceLabel(type: string): string {
+  const labels: Record<string, string> = {
+    x: 'X', youtube: 'YouTube', github: 'GitHub', reddit: 'Reddit',
+    web: 'Web', feed: 'Feed',
+  };
+  return labels[type] || type;
 }
 
 function timeAgo(iso: string): string {
-  const d = new Date(iso);
-  const diff = Date.now() - d.getTime();
+  const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return `${mins}m`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return `${hours}h`;
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return d.toLocaleDateString();
+  if (days < 30) return `${days}d`;
+  return new Date(iso).toLocaleDateString();
 }
 
 function highlightSnippet(snippet: string) {
-  const parts = snippet.split(/(<mark>.*?<\/mark>)/g);
-  return parts.map((p, i) => {
-    if (p.startsWith('<mark>')) {
-      return <mark key={i} style={{
-        background: 'rgba(88,166,255,0.2)', color: 'var(--accent)',
+  return snippet.split(/(<mark>.*?<\/mark>)/g).map((p, i) =>
+    p.startsWith('<mark>') ? (
+      <mark key={i} style={{
+        background: 'var(--accent-muted)', color: 'var(--accent)',
         borderRadius: 2, padding: '0 2px',
-      }}>{p.replace(/<\/?mark>/g, '')}</mark>;
-    }
-    return p;
-  });
+      }}>{p.replace(/<\/?mark>/g, '')}</mark>
+    ) : p
+  );
 }
+
+type Theme = 'dark' | 'light';
 
 export default function App() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  const [ingesting, setIngesting] = useState(false);
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<Entry | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [captureUrl, setCaptureUrl] = useState('');
+  const [capturing, setCapturing] = useState(false);
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return 'dark';
+    const stored = localStorage.getItem('pliny-theme');
+    if (stored === 'light' || stored === 'dark') return stored;
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  });
+
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Apply theme
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('pliny-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
 
   const fetchEntries = useCallback(async (q: string = '', p: number = 1) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (q) params.set('q', q);
-      params.set('limit', String(PER_PAGE));
-      params.set('page', String(p));
+      const params = new URLSearchParams({ q, limit: String(PER_PAGE), page: String(p) });
       const res = await fetch(`${API}/api/entries?${params}`);
       const data = await res.json();
       setEntries(data.entries || []);
-    } catch (e) {
-      console.error('Search failed:', e);
-    } finally {
-      setLoading(false);
-    }
+    } catch { /* server not running */ }
+    finally { setLoading(false); }
   }, []);
 
   const fetchStats = useCallback(async () => {
     try {
       const res = await fetch(`${API}/api/stats`);
-      const data = await res.json();
-      setStats(data);
+      setStats(await res.json());
     } catch { /* not critical */ }
   }, []);
 
-  useEffect(() => {
-    fetchEntries();
-    fetchStats();
-  }, [fetchEntries, fetchStats]);
+  useEffect(() => { fetchEntries(); fetchStats(); }, [fetchEntries, fetchStats]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,135 +113,172 @@ export default function App() {
     fetchEntries(query, 1);
   };
 
-  const handlePage = (p: number) => {
-    setPage(p);
-    fetchEntries(query, p);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleIngest = async () => {
-    const url = prompt('URL to capture:');
-    if (!url) return;
-    setIngesting(true);
+  const handleCapture = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!captureUrl.trim()) return;
+    setCapturing(true);
     try {
       const res = await fetch(`${API}/api/ingest/add-url`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: captureUrl.trim() }),
       });
       const data = await res.json();
       if (data.status === 'ingested') {
+        setCaptureUrl('');
+        setCaptureOpen(false);
         fetchEntries(query, page);
         fetchStats();
-      } else {
-        alert('No content found at that URL.');
       }
-    } catch {
-      alert('Failed to ingest URL.');
-    } finally {
-      setIngesting(false);
-    }
+    } catch { /* */ }
+    finally { setCapturing(false); }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') setDetail(null);
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-      e.preventDefault();
-      (document.querySelector('input') as HTMLInputElement)?.focus();
-    }
-  };
+  const filteredEntries = sourceFilter === 'all'
+    ? entries
+    : entries.filter(e => e.source_type === sourceFilter);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setDetail(null); setCaptureOpen(false); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+      if (e.key === '/' && document.activeElement !== searchRef.current) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   return (
-    <div onKeyDown={handleKeyDown}>
+    <div>
       {/* Header */}
       <header style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 16, paddingBottom: 12,
+        paddingBottom: 12, marginBottom: 16,
         borderBottom: '1px solid var(--border-subtle)',
       }}>
-        <h1 style={{
-          fontFamily: 'var(--font-mono)', fontSize: '1.25rem', fontWeight: 650,
-          color: 'var(--accent)', letterSpacing: '-0.4px',
-        }}>
-          Pliny
-        </h1>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+          <h1 style={{
+            fontFamily: 'var(--font-mono)', fontSize: '1.2rem', fontWeight: 650,
+            color: 'var(--accent)', letterSpacing: '-0.4px',
+          }}>Pliny</h1>
           {stats && (
-            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
               {stats.total_entries} entries
             </span>
           )}
-          <button onClick={handleIngest} disabled={ingesting}
-            style={{
-              background: 'var(--accent-muted)', color: 'var(--accent)',
-              border: '1px solid rgba(88,166,255,0.2)', borderRadius: 'var(--radius-sm)',
-              padding: '4px 14px', fontSize: '0.82rem', fontWeight: 500,
-              cursor: 'pointer', fontFamily: 'var(--font)',
-            }}>
-            {ingesting ? '...' : '+ Capture'}
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button onClick={() => setCaptureOpen(!captureOpen)}
+            style={btnStyle}>
+            {captureOpen ? '✕' : '+ Capture'}
+          </button>
+          <button onClick={toggleTheme}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            style={{ ...btnStyle, fontSize: '1rem', padding: '4px 8px' }}>
+            {theme === 'dark' ? '☀' : '☾'}
           </button>
         </div>
       </header>
 
-      {/* Search */}
-      <form onSubmit={handleSearch} style={{ marginBottom: 20 }}>
-        <input type="text" value={query} onChange={e => setQuery(e.target.value)}
-          placeholder="Search your knowledge... (⌘K to focus)"
-          autoFocus
+      {/* Inline capture form */}
+      {captureOpen && (
+        <form onSubmit={handleCapture}
           style={{
-            width: '100%', maxWidth: 680, display: 'block', margin: '0 auto',
-            background: 'var(--bg-input)', border: '1px solid var(--border-standard)',
-            borderRadius: 'var(--radius-md)', padding: '0 16px', height: 40,
-            fontSize: '0.92rem', fontFamily: 'var(--font)', color: 'var(--text)',
-            outline: 'none', transition: 'border-color 0.15s',
-          }}
-          onFocus={e => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
-          onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-standard)'; }}
+            display: 'flex', gap: 8, marginBottom: 16,
+            animation: 'fadeIn 0.2s ease',
+          }}>
+          <input
+            type="url"
+            value={captureUrl}
+            onChange={e => setCaptureUrl(e.target.value)}
+            placeholder="Paste a URL to capture..."
+            autoFocus
+            style={inputStyle}
+          />
+          <button type="submit" disabled={capturing || !captureUrl.trim()}
+            style={{
+              ...btnStyle,
+              background: captureUrl.trim() ? 'var(--accent)' : 'var(--bg-input)',
+              color: captureUrl.trim() ? '#fff' : 'var(--text-muted)',
+            }}>
+            {capturing ? '...' : 'Save'}
+          </button>
+        </form>
+      )}
+
+      {/* Search + filters */}
+      <form onSubmit={handleSearch} style={{ marginBottom: 12 }}>
+        <input
+          ref={searchRef}
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Search... (⌘K or / to focus)"
+          style={{ ...inputStyle, width: '100%' }}
         />
       </form>
 
+      {/* Source filter chips */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, flexWrap: 'wrap' }}>
+        {SOURCE_TYPES.map(type => (
+          <button key={type}
+            onClick={() => { setSourceFilter(type); setPage(1); }}
+            style={{
+              padding: '2px 10px', borderRadius: 9999,
+              fontSize: '0.72rem', fontWeight: 500,
+              border: '1px solid',
+              cursor: 'pointer',
+              fontFamily: 'var(--font)',
+              transition: 'all 0.12s',
+              background: sourceFilter === type ? 'var(--accent-muted)' : 'transparent',
+              color: sourceFilter === type ? 'var(--accent)' : 'var(--text-muted)',
+              borderColor: sourceFilter === type ? 'rgba(88,166,255,0.2)' : 'var(--border-subtle)',
+            }}>
+            {type === 'all' ? 'All' : sourceLabel(type)}
+          </button>
+        ))}
+      </div>
+
       {/* Content */}
       {loading ? (
-        <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
-          {Array.from({length: 6}).map((_, i) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {Array.from({length: 5}).map((_, i) => (
             <div key={i} style={{
               background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-md)', padding: 16, height: 110,
-              opacity: 0.4,
+              borderRadius: 'var(--radius-md)', height: 72, opacity: 0.4,
             }} />
           ))}
         </div>
-      ) : entries.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '64px 24px', color: 'var(--text-muted)' }}>
-          <div style={{ fontSize: '2rem', marginBottom: 12, opacity: 0.4 }}>🔍</div>
-          <div style={{ fontSize: '0.95rem', fontWeight: 550, color: 'var(--text-dim)', marginBottom: 6 }}>
-            {query ? 'Nothing found' : 'Your knowledge base is empty'}
+      ) : filteredEntries.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '1.5rem', marginBottom: 8, opacity: 0.3 }}>
+            {query || sourceFilter !== 'all' ? '🔍' : '📚'}
           </div>
-          <div style={{ fontSize: '0.82rem', marginBottom: 16 }}>
-            {query ? 'Try a different search term.' : 'Capture your first URL to get started.'}
-          </div>
-          {!query && (
-            <button onClick={handleIngest}
-              style={{
-                background: 'var(--accent-muted)', color: 'var(--accent)',
-                border: 'none', borderRadius: 'var(--radius-sm)',
-                padding: '6px 20px', fontSize: '0.85rem', fontWeight: 500,
-                cursor: 'pointer', fontFamily: 'var(--font)',
-              }}>
-              Capture a URL
-            </button>
-          )}
+          <p style={{ fontSize: '0.88rem', fontWeight: 500, color: 'var(--text-dim)', marginBottom: 4 }}>
+            {query ? 'Nothing found' : sourceFilter !== 'all' ? `No ${sourceLabel(sourceFilter)} entries` : 'No entries yet'}
+          </p>
+          <p style={{ fontSize: '0.78rem' }}>
+            {query ? 'Try a different search.' : sourceFilter !== 'all' ? 'Try a different filter.' : 'Capture your first URL to start.'}
+          </p>
         </div>
       ) : (
         <>
-          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
-            {entries.map(entry => (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {filteredEntries.map(entry => (
               <article key={entry.id}
                 onClick={() => setDetail(entry)}
                 style={{
                   background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-md)', padding: '14px 16px',
-                  cursor: 'pointer', transition: 'background 0.12s, border-color 0.12s',
+                  borderRadius: 'var(--radius-md)', padding: '12px 16px',
+                  cursor: 'pointer', transition: 'background 0.1s, border-color 0.1s',
+                  animation: 'fadeIn 0.2s ease',
                 }}
                 onMouseEnter={e => {
                   e.currentTarget.style.background = 'var(--bg-hover)';
@@ -239,28 +288,38 @@ export default function App() {
                   e.currentTarget.style.background = 'var(--bg-card)';
                   e.currentTarget.style.borderColor = 'var(--border-subtle)';
                 }}>
-                <div style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <span style={{
-                    width: 24, height: 24, borderRadius: 'var(--radius-sm)',
+                    width: 22, height: 22, borderRadius: 4,
                     background: 'var(--bg-hover)', display: 'flex',
                     alignItems: 'center', justifyContent: 'center',
-                    fontSize: '0.75rem', flexShrink: 0,
+                    fontSize: '0.7rem', flexShrink: 0,
                     border: '1px solid var(--border-subtle)',
+                    marginTop: 1,
                   }}>{sourceIcon(entry.source_type)}</span>
-                  <h3 style={{
-                    fontSize: '0.88rem', fontWeight: 550, lineHeight: 1.35,
-                    overflow: 'hidden', display: '-webkit-box',
-                    WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                  }}>{entry.title}</h3>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: '0.85rem', fontWeight: 550, lineHeight: 1.35,
+                      marginBottom: 4,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {entry.title}
+                    </div>
+                    <div style={{
+                      fontSize: '0.78rem', color: 'var(--text-dim)', lineHeight: 1.45,
+                      overflow: 'hidden', display: '-webkit-box',
+                      WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                    }}>
+                      {highlightSnippet(entry.snippet)}
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: '0.68rem', color: 'var(--text-faint)',
+                    whiteSpace: 'nowrap', marginTop: 2,
+                  }}>
+                    {timeAgo(entry.created_at)}
+                  </span>
                 </div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 6 }}>
-                  [{entry.source_type}] · {timeAgo(entry.created_at)}
-                </div>
-                <p style={{
-                  fontSize: '0.78rem', color: 'var(--text-dim)', lineHeight: 1.45,
-                  overflow: 'hidden', display: '-webkit-box',
-                  WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
-                }}>{highlightSnippet(entry.snippet)}</p>
               </article>
             ))}
           </div>
@@ -268,18 +327,20 @@ export default function App() {
           {/* Pagination */}
           <div style={{
             display: 'flex', justifyContent: 'center', gap: 6,
-            marginTop: 24, paddingTop: 16,
+            marginTop: 20, paddingTop: 14,
             borderTop: '1px solid var(--border-subtle)',
           }}>
-            <button onClick={() => handlePage(page - 1)} disabled={page <= 1}
-              style={paginationBtnStyle(page <= 1)}>← Prev</button>
+            <button onClick={() => { setPage(p => Math.max(1, p - 1)); fetchEntries(query, page - 1); }}
+              disabled={page <= 1}
+              style={pageBtnStyle(page <= 1)}>←</button>
             <span style={{
-              fontSize: '0.78rem', color: 'var(--text-muted)',
-              display: 'flex', alignItems: 'center', padding: '0 8px',
+              fontSize: '0.75rem', color: 'var(--text-muted)',
+              display: 'flex', alignItems: 'center', padding: '0 6px',
               fontVariantNumeric: 'tabular-nums',
-            }}>Page {page}</span>
-            <button onClick={() => handlePage(page + 1)} disabled={entries.length < PER_PAGE}
-              style={paginationBtnStyle(entries.length < PER_PAGE)}>Next →</button>
+            }}>{page}</span>
+            <button onClick={() => { setPage(p => p + 1); fetchEntries(query, page + 1); }}
+              disabled={entries.length < PER_PAGE}
+              style={pageBtnStyle(entries.length < PER_PAGE)}>→</button>
           </div>
         </>
       )}
@@ -289,34 +350,44 @@ export default function App() {
         <div onClick={() => setDetail(null)}
           style={{
             position: 'fixed', inset: 0, zIndex: 100,
-            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+            background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 20,
           }}>
           <div onClick={e => e.stopPropagation()}
             style={{
-              width: 680, maxWidth: '92vw', maxHeight: '85vh',
+              width: 640, maxWidth: '100%', maxHeight: '85vh',
               background: 'var(--bg-card)', border: '1px solid var(--border-standard)',
               borderRadius: 'var(--radius-lg)', overflow: 'auto',
-              padding: '20px 24px', boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+              padding: '20px 24px',
+              animation: 'modalIn 0.15s ease',
             }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-              <h2 style={{ fontSize: '1rem', fontWeight: 600 }}>{detail.title}</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+              <div>
+                <h2 style={{ fontSize: '1rem', fontWeight: 600, lineHeight: 1.3 }}>{detail.title}</h2>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                  {sourceLabel(detail.source_type)} · {timeAgo(detail.created_at)}
+                </div>
+              </div>
               <button onClick={() => setDetail(null)}
                 style={{
                   background: 'none', border: 'none', color: 'var(--text-dim)',
-                  fontSize: '1.3rem', cursor: 'pointer', padding: 4,
+                  fontSize: '1.3rem', cursor: 'pointer', padding: '0 4px',
+                  lineHeight: 1,
                 }}>×</button>
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 16 }}>
-              [{detail.source_type}] · {timeAgo(detail.created_at)} ·{' '}
-              <a href={detail.source_url} target="_blank" rel="noopener noreferrer"
-                style={{ color: 'var(--accent)' }}>Open original →</a>
-            </div>
+            <a href={detail.source_url} target="_blank" rel="noopener noreferrer"
+              style={{
+                display: 'inline-block', marginBottom: 14,
+                fontSize: '0.78rem', color: 'var(--accent)',
+              }}>
+              Open original →
+            </a>
             <div style={{
-              fontSize: '0.85rem', lineHeight: 1.6, color: 'var(--text-dim)',
+              fontSize: '0.84rem', lineHeight: 1.6, color: 'var(--text-dim)',
               whiteSpace: 'pre-wrap', wordBreak: 'break-word',
             }}>
-              {detail.content || detail.snippet}
+              {detail.snippet.replace(/<\/?mark>/g, '')}
             </div>
           </div>
         </div>
@@ -325,9 +396,39 @@ export default function App() {
   );
 }
 
-const paginationBtnStyle = (disabled: boolean): React.CSSProperties => ({
-  background: 'var(--bg-card)', color: disabled ? 'var(--text-faint)' : 'var(--text-dim)',
-  border: '1px solid var(--border-standard)', borderRadius: 'var(--radius-sm)',
-  padding: '5px 14px', fontSize: '0.82rem', cursor: disabled ? 'default' : 'pointer',
-  fontFamily: 'var(--font)', transition: 'background 0.1s',
+const inputStyle: React.CSSProperties = {
+  background: 'var(--bg-input)',
+  border: '1px solid var(--border-standard)',
+  borderRadius: 'var(--radius-md)',
+  padding: '0 14px',
+  height: 38,
+  fontSize: '0.88rem',
+  fontFamily: 'var(--font)',
+  color: 'var(--text)',
+  outline: 'none',
+  flex: 1,
+};
+
+const btnStyle: React.CSSProperties = {
+  background: 'var(--accent-muted)',
+  color: 'var(--accent)',
+  border: '1px solid rgba(88,166,255,0.15)',
+  borderRadius: 'var(--radius-sm)',
+  padding: '4px 12px',
+  fontSize: '0.8rem',
+  fontWeight: 500,
+  cursor: 'pointer',
+  fontFamily: 'var(--font)',
+};
+
+const pageBtnStyle = (disabled: boolean): React.CSSProperties => ({
+  background: 'var(--bg-card)',
+  color: disabled ? 'var(--text-faint)' : 'var(--text-dim)',
+  border: '1px solid var(--border-standard)',
+  borderRadius: 'var(--radius-sm)',
+  padding: '4px 10px',
+  fontSize: '0.82rem',
+  cursor: disabled ? 'default' : 'pointer',
+  fontFamily: 'var(--font)',
+  transition: 'background 0.1s',
 });
