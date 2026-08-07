@@ -39,6 +39,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/ingest/add-url", post(ingest))
         .route("/api/notes", post(create_note))
         .route("/api/stats", get(stats))
+        .route("/api/random", get(random))
+        .route("/api/on-this-day", get(on_this_day))
         // Serve embedded frontend (SPA fallback)
         .route("/", get(serve_index))
         .fallback(serve_frontend)
@@ -263,6 +265,28 @@ async fn toggle_star(
     let starred = state.store.toggle_star(&id)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(serde_json::json!({"starred": starred})))
+}
+
+async fn random(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let entry = state.store.random_entry()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    match entry {
+        Some(e) => Ok(Json(serde_json::json!({
+            "id": e.id.to_string(), "title": e.title, "source_url": e.source_url,
+            "source_type": e.source_type.as_str(), "created_at": e.created_at.to_rfc3339(),
+        }))),
+        None => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+async fn on_this_day(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let entries = state.store.on_this_day()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(serde_json::json!({ "entries": entries })))
 }
 
 async fn related_entries(

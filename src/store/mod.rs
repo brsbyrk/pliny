@@ -183,6 +183,65 @@ impl Store {
 
         Ok(Stats { total, db_size_mb: db_size, by_source, top_tags, last_ingested: last })
     }
+
+    /// Return a random entry.
+    pub fn random_entry(&self) -> Result<Option<crate::core::Entry>> {
+        let conn = self.conn();
+        let count: usize = conn.query_row("SELECT COUNT(*) FROM entries", [], |r| r.get(0))?;
+        if count == 0 { return Ok(None); }
+        let mut stmt = conn.prepare(
+            "SELECT id, source_url, title, content, source_type, tags, created_at
+             FROM entries ORDER BY RANDOM() LIMIT 1"
+        )?;
+        let mut rows = stmt.query_map([], |row| {
+            let tags_str: String = row.get(5).unwrap_or_default();
+            let created_at: String = row.get(6)?;
+            Ok(crate::core::Entry {
+                id: crate::core::EntryId(row.get(0)?),
+                source_url: row.get(1)?,
+                title: row.get(2)?,
+                content: row.get(3)?,
+                source_type: {
+                    let s: String = row.get(4)?;
+                    match s.as_str() {
+                        "x" => crate::core::SourceType::X,
+                        "youtube" => crate::core::SourceType::YouTube,
+                        "github" => crate::core::SourceType::GitHub,
+                        "reddit" => crate::core::SourceType::Reddit,
+                        "feed" => crate::core::SourceType::Feed,
+                        "" | "note" => crate::core::SourceType::Note,
+                        _ => crate::core::SourceType::Web,
+                    }
+                },
+                tags: serde_json::from_str(&tags_str).unwrap_or_default(),
+                created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .unwrap_or_else(|_| chrono::Utc::now()),
+            })
+        })?;
+        Ok(rows.next().transpose()?)
+    }
+
+    /// Entries from this day in history (any year).
+    pub fn on_this_day(&self) -> Result<Vec<crate::search::SearchResult>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT id, title, source_url, source_type, created_at, starred, coalesce(tags, '[]'), substr(content, 1, 200)
+             FROM entries WHERE strftime('%m-%d', created_at) = strftime('%m-%d', 'now')
+             ORDER BY created_at DESC LIMIT 20"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let tags_str: String = row.get(6).unwrap_or_default();
+            Ok(crate::search::SearchResult {
+                id: row.get(0)?, title: row.get(1)?, source_url: row.get(2)?,
+                source_type: row.get(3)?, created_at: row.get(4)?,
+                starred: row.get::<_, i32>(5)? != 0,
+                snippet: row.get(7)?,
+                tags: serde_json::from_str(&tags_str).unwrap_or_default(),
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
 }
 
 /// Knowledge base statistics.
